@@ -145,9 +145,9 @@ jobs:
     permissions:
       contents: read
     # Needs the commit that taught homebrew-formula.yml to mint from a GitHub
-    # App (e587109); that lets the tap run on a short-lived installation token
+    # App (8b42ae0); that lets the tap run on a short-lived installation token
     # scoped to one repository instead of a long-lived PAT.
-    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@e587109a12a93cb77ddf41d5a20879dd9bffc50e
+    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@8b42ae0a25c400a444c7b4ac995b409c79ba001e
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
       formula-name: crap
