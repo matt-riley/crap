@@ -144,7 +144,10 @@ jobs:
     needs: [release-please, publish]
     permissions:
       contents: read
-    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@cb986078a5bd4775e5fb05348f3618e41fedf4de # v4.0.0
+    # Needs the commit that taught homebrew-formula.yml to mint from a GitHub
+    # App (5fe9ae41); that lets the tap run on a short-lived installation token
+    # scoped to one repository instead of a long-lived PAT.
+    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@5fe9ae41621940664f74b39910667750d4fa18a4
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
       formula-name: crap
@@ -157,5 +160,9 @@ jobs:
       archive-aarch64-macos: crap_darwin_arm64.tar.gz
       archive-x86_64-linux: crap_linux_amd64.tar.gz
       archive-aarch64-linux: crap_linux_arm64.tar.gz
+      # APP_ID is the tap App, the same one the GoReleaser repos use.
+      tap-app-id: ${{ vars.APP_ID }}
     secrets:
+      private-key: ${{ secrets.PRIVATE_KEY }}
+      # Used only when the App is unconfigured or its mint failed.
       homebrew-tap-token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || secrets.TAP_TOKEN }}

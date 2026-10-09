@@ -227,9 +227,11 @@ the Homebrew tap — all in that one run, so no tag-triggered workflow is needed
 `crap` installs with `brew install matt-riley/tools/crap`.
 
 The tap only works from a public repository with anonymously downloadable
-release assets. The Homebrew step needs a `HOMEBREW_TAP_GITHUB_TOKEN` (or
-`TAP_TOKEN`) secret with contents write on `matt-riley/homebrew-tools`; without
-it the release fails rather than quietly skipping the tap.
+release assets. Publishing runs on an installation token minted from the tap
+GitHub App — the same one the GoReleaser repos use — so the repository needs
+the `APP_ID` variable and `PRIVATE_KEY` secret, not a long-lived PAT. A
+`HOMEBREW_TAP_GITHUB_TOKEN` (or `TAP_TOKEN`) secret still works as a fallback;
+with neither configured the release fails rather than quietly skipping the tap.
 
 ## Development
 
