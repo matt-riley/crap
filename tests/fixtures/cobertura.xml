@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<coverage line-rate="0.6" version="1.9" xmlns="http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+  <packages>
+    <package name="src" line-rate="0.6">
+      <classes>
+        <class name="sample" filename="src/sample.rs" line-rate="0.6">
+          <methods/>
+          <lines>
+            <line number="2" hits="1"/>
+            <line number="3" hits="1"/>
+            <line number="4" hits="1"/>
+            <line number="6" hits="0"/>
+            <line number="7" hits="0"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>

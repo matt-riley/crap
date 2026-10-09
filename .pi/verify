@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# Verification for crap: formatting, lints, tests, then a real run of the binary
+# to prove it can score itself and stay inside its token budget.
+set -eu
+cd "$(dirname "$0")/.."
+
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+cargo run --quiet -- src --no-coverage --max-tokens 300 >"$tmp"
+
+python3 - "$tmp" <<'PY'
+import json, sys
+
+text = open(sys.argv[1]).read()
+doc = json.loads(text)
+functions = doc["summary"]["functions"]
+assert functions > 0, "scored no functions"
+tokens = len(text) // 4
+assert tokens <= 300, f"budget blown: {tokens} estimated tokens"
+print(
+    f"self-scan ok: {functions} functions, {doc['summary']['offenders']} offenders, "
+    f"{tokens} estimated tokens"
+)
+PY
