@@ -1,6 +1,6 @@
 [package]
 name = "crap-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Token-aware Change Risk Anti-Patterns (CRAP) scoring for TypeScript, Rust, Go and Lua"
 license = "MIT"
