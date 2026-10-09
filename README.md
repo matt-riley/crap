@@ -57,6 +57,8 @@ cargo install --path .
 ```bash
 crap src/                                  # worst offenders, JSON
 crap . --coverage lcov.info                # with real coverage
+crap src/ --diff                           # only what I have not committed yet
+crap src/ --diff 'main...HEAD'             # only what this branch added
 crap src/ --format text                    # for humans
 crap src/ --fail-above                     # CI gate, exit 1 if anything is over
 crap src/ --max-tokens 4000 --top 50       # when you want more
@@ -112,6 +114,45 @@ refuses to guess when a suffix is ambiguous. `coverage.files_matched` in the
 summary tells you how many scanned files actually matched — compare it against
 `summary.files` before believing anything.
 
+## Scoring only what you changed
+
+During feature work the useful question is "is *my* code risky?", not "is
+this repository risky?" — a 900-function codebase will always have offenders
+somewhere. `--diff` narrows the report to the functions a branch touched.
+
+```bash
+crap src/ --diff                  # uncommitted work (against HEAD)
+crap src/ --diff main             # uncommitted work plus the difference from main
+crap src/ --diff 'main...HEAD'    # committed work since branching
+crap src/ --diff main --fail-above   # fail the build only on my code
+crap src/ --diff-file ci.patch    # from a patch, no git required (`-` for stdin)
+```
+
+The revspec is passed straight to `git diff`, so anything git understands works.
+Git runs from the scanned tree rather than the process's working directory, so
+`crap /some/other/repo --diff main` diffs the repo you pointed at.
+
+**What counts as changed.** A function is scored when a line *added* by the diff
+falls inside it. Deleted lines have no position in the new file, so removing
+code from inside a function does not by itself flag it — the usual caveat of
+diff-based tooling. Untracked files are included in full, because a new file is
+the most likely thing to be written during feature work and `git diff` alone
+does not show it.
+
+**The summary keeps its meaning.** `summary.files` and `summary.functions`
+always describe the whole scan; `offenders`, `worst`, `mean` and `crap_load`
+describe the reported set, which in diff mode is the changed functions. A `diff`
+block says what was diffed against and how much of it matched:
+
+```json
+"diff": {"source": "main...HEAD", "files": 4, "matched_files": 4, "functions": 12},
+"dropped": {"below_threshold": 33, "not_shown": 0, "unchanged": 88}
+```
+
+`dropped.unchanged` is the count the diff did not touch, so a narrow report is
+never mistaken for a clean one. If `matched_files` is 0, the paths in the diff
+did not line up with anything scanned and the empty result means nothing.
+
 ## Output
 
 JSON is the default and it is budgeted. The preamble (summary, coverage status)
@@ -148,7 +189,8 @@ opening the file.
 ## Exit codes
 
 `0` report produced, `1` threshold tripped and `--fail-above` was set, `2`
-error (unreadable coverage file, bad pattern, a path that does not exist). `"ok"` in the JSON carries the
+error (unreadable coverage file, a bad exclude pattern, a path that does not
+exist, a git command that failed). `"ok"` in the JSON carries the
 same verdict, so a model never has to infer it from a status code.
 
 ## Skips
@@ -170,6 +212,7 @@ against the path as printed — `crap tests/` finds nothing without
 - No diff or changed-lines mode: it scores what you point it at, not what a
   pull request touched.
 - No baseline or regression comparison — `--fail-above` is the whole CI story.
+  `--diff` narrows the gate to a branch's own changes, which covers most of it.
 - JavaScript is parsed with the TypeScript/TSX grammars rather than a dedicated
   JS grammar. Fine in practice; add `tree-sitter-javascript` if it ever isn't.
 - Coverage is line-based, so a function with a single untested line inside a

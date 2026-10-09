@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
-# Verification for crap: formatting, lints, tests, then a real run of the binary
-# to prove it can score itself and stay inside its token budget.
+# Verification for crap: formatting, lints, tests, then real runs of the binary
+# to prove it scores itself inside its token budget and narrows correctly in
+# diff mode.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -9,9 +10,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 
 tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-cargo run --quiet -- src --no-coverage --max-tokens 300 >"$tmp"
+trap 'rm -f "$tmp" "$tmp.patch"' EXIT
 
+cargo run --quiet -- src --no-coverage --max-tokens 300 >"$tmp"
 python3 - "$tmp" <<'PY'
 import json, sys
 
@@ -24,5 +25,32 @@ assert tokens <= 300, f"budget blown: {tokens} estimated tokens"
 print(
     f"self-scan ok: {functions} functions, {doc['summary']['offenders']} offenders, "
     f"{tokens} estimated tokens"
+)
+PY
+
+# Diff mode must narrow the report without changing what the summary measures.
+# Target a line inside a real function, found rather than hardcoded, so the
+# check cannot quietly go vacuous when report.rs shifts.
+inside=$(grep -n 'pub fn render_json' src/report.rs | head -1 | cut -d: -f1)
+test -n "$inside"
+cat >"$tmp.patch" <<PATCH
+--- a/src/report.rs
++++ b/src/report.rs
+@@ -$inside,0 +$((inside + 1)) @@
++// one injected line
+PATCH
+
+cargo run --quiet -- src --no-coverage --diff-file "$tmp.patch" >"$tmp"
+python3 - "$tmp" <<'PY'
+import json, sys
+
+doc = json.load(open(sys.argv[1]))
+assert doc["diff"]["matched_files"] == 1, doc["diff"]
+assert doc["diff"]["functions"] >= 1, "the patch landed inside no function"
+assert doc["dropped"]["unchanged"] > 0, "diff mode withheld nothing"
+assert doc["diff"]["functions"] < doc["summary"]["functions"], "diff did not narrow"
+print(
+    f"diff mode ok: {doc['diff']['functions']} changed of "
+    f"{doc['summary']['functions']} functions"
 )
 PY

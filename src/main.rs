@@ -388,6 +388,7 @@ fn git_dir(cli: &Cli) -> PathBuf {
 fn diff_source(cli: &Cli) -> String {
     match (&cli.diff, &cli.diff_file) {
         (Some(rev), _) => rev.clone(),
+        (_, Some(path)) if path.as_os_str() == "-" => "stdin".to_string(),
         (_, Some(path)) => path.display().to_string(),
         _ => String::new(),
     }

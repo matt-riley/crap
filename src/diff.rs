@@ -31,11 +31,6 @@ impl Changed {
             &["diff", "--no-color", "--unified=0", rev],
             dir,
         )?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("git diff {rev} failed: {}", stderr.trim()));
-        }
-
         let mut changed = Self::parse(&String::from_utf8_lossy(&output.stdout));
         changed.add_untracked(dir)?;
         Ok(changed)
@@ -140,10 +135,36 @@ fn git(args: &[&str], dir: &Path) -> Result<std::process::Output, String> {
         .output()
         .map_err(|e| format!("cannot run git: {e}"))?;
     if !output.status.success() {
+        // Git answers some failures with its entire usage text. Quote one line
+        // and no more, or a mistyped rev floods the caller's context window.
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git {} failed: {}", args.join(" "), stderr.trim()));
+        let first = stderr
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or("failed");
+        let hint = if stderr.to_lowercase().contains("not a git repository") {
+            " (use --diff-file, or run inside a repository)"
+        } else {
+            ""
+        };
+        return Err(format!(
+            "git {} failed: {}{hint}",
+            args.join(" "),
+            truncate(first, 200)
+        ));
     }
     Ok(output)
+}
+
+fn truncate(text: &str, max: usize) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let cut = (0..max)
+        .rev()
+        .find(|i| text.is_char_boundary(*i))
+        .unwrap_or(0);
+    format!("{}…", &text[..cut])
 }
 
 pub fn overlaps(ranges: &[(u32, u32)], start: u32, end: u32) -> bool {

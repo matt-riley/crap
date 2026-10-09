@@ -459,3 +459,41 @@ fn diff_mode_reads_git_and_includes_untracked_files() {
     assert!(!names.contains(&"untouched"), "found {names:?}");
     assert_eq!(parsed["diff"]["source"], "HEAD");
 }
+
+/// git answers some failures with its entire usage text. A wrong rev must not
+/// dump that into a caller's context window.
+#[test]
+fn git_failures_are_quoted_briefly() {
+    let dir = std::env::temp_dir().join("crap-not-a-repo");
+    std::fs::create_dir_all(&dir).unwrap();
+    // Skip if this machine really does have a repo at /tmp.
+    if Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        eprintln!("skipping: temp dir is inside a git repository");
+        return;
+    }
+
+    let out = Command::new(env!("CARGO_BIN_EXE_crap"))
+        .args([dir.to_str().unwrap(), "--diff"])
+        .output()
+        .expect("binary runs");
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.len() < 300,
+        "error output was {} bytes: {stderr}",
+        stderr.len()
+    );
+    assert!(
+        stderr.to_lowercase().contains("not a git repository"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("--diff-file"),
+        "the error should say what to do instead"
+    );
+}
