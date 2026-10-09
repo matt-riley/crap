@@ -222,8 +222,18 @@ against the path as printed — `crap tests/` finds nothing without
 
 Releases go out through [matt-riley-ci](https://github.com/matt-riley/matt-riley-ci).
 Conventional commits on `main` drive release-please; merging its release PR
-builds the four platform binaries, publishes the GitHub release, and updates
-the Homebrew tap — all in that one run, so no tag-triggered workflow is needed.
+creates the tag and the GitHub release, and the same run builds the four
+platform binaries, uploads them and un-drafts the release.
+
+The tap is updated by `homebrew.yml`, which has to run on the release tag
+itself: `homebrew-formula.yml` only trusts a run whose ref is
+`refs/tags/<tag>`. A tag created with `GITHUB_TOKEN` starts no workflow, so
+`release.yml` dispatches it with `gh workflow run --ref <tag>` --
+`workflow_dispatch` being the one event `GITHUB_TOKEN` can still raise. That in
+turn means tags must look like `v1.2.3`, which is why
+`release-please-config.json` sets `include-component-in-tag: false`; the Rust
+strategy would otherwise tag `crap-cli-v0.1.1`, which the publisher rejects.
+
 `crap` installs with `brew install matt-riley/tools/crap`.
 
 The tap only works from a public repository with anonymously downloadable

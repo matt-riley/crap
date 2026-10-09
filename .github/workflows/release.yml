@@ -1,9 +1,9 @@
 name: Release
 
-# Release Please opens a release PR from conventional commits. When that PR
-# merges, this same run builds the binaries, publishes the release and updates
-# the Homebrew tap — no tag-triggered workflow, so a release created with
-# GITHUB_TOKEN still reaches the tap.
+# Release Please opens a release PR from conventional commits. Merging it creates
+# the release and its tag, then this run builds the binaries and publishes the
+# assets. The tap is updated by homebrew.yml, which has to run on the tag
+# itself -- see the dispatch job below for why.
 on:
   push:
     branches: [main]
@@ -139,30 +139,29 @@ jobs:
           gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
 
-  homebrew:
-    name: Homebrew tap
+  dispatch-homebrew:
+    name: Start tap publisher
     needs: [release-please, publish]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
-    # Needs the commit that taught homebrew-formula.yml to mint from a GitHub
-    # App (4.1.0); that lets the tap run on a short-lived installation token
-    # scoped to one repository instead of a long-lived PAT.
-    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@0a310f1286537ed4fd000af4b35cd6459b00448d
-    with:
-      tag: ${{ needs.release-please.outputs.tag_name }}
-      formula-name: crap
-      class-name: Crap
-      desc: Change Risk Anti-Patterns (CRAP) scoring for TypeScript, Rust, Go and Lua
-      homepage: https://github.com/matt-riley/crap
-      license: MIT
-      binary: crap
-      archive-x86_64-macos: crap_darwin_amd64.tar.gz
-      archive-aarch64-macos: crap_darwin_arm64.tar.gz
-      archive-x86_64-linux: crap_linux_amd64.tar.gz
-      archive-aarch64-linux: crap_linux_arm64.tar.gz
-      # APP_ID is the tap App, the same one the GoReleaser repos use.
-      tap-app-id: ${{ vars.APP_ID }}
-    secrets:
-      private-key: ${{ secrets.PRIVATE_KEY }}
-      # Used only when the App is unconfigured or its mint failed.
-      homebrew-tap-token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || secrets.TAP_TOKEN }}
+      actions: write
+    steps:
+      # The tag is the only ref homebrew-formula.yml trusts, and a tag created
+      # with GITHUB_TOKEN starts nothing. workflow_dispatch is the one event
+      # GITHUB_TOKEN can still raise, so ask for a run at the tag. A release
+      # token, if configured, starts it from the tag push instead.
+      - name: Dispatch the tap publisher at the release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          RELEASE_TOKEN_AVAILABLE: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_TOKEN_AVAILABLE" = true ]; then
+            echo 'A release token is configured, so the tag starts the publisher itself.'
+          else
+            gh workflow run homebrew.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          fi

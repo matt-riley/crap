@@ -15,6 +15,30 @@ cargo build --release --locked
 actionlint .github/workflows/*.yml
 python3 .pi/check-workflows.py
 
+# homebrew-formula.yml rejects any tag that is not exactly vX.Y.Z, and only
+# trusts a run whose ref is that tag. Both couplings fail silently: the release
+# still publishes, and only the tap update dies. Lock them here.
+python3 - <<'PY'
+import json
+
+config = json.load(open("release-please-config.json"))
+package = next(iter(config["packages"].values()))
+assert package.get("include-component-in-tag") is False, (
+    "release-please would tag <component>-vX.Y.Z, which homebrew-formula.yml rejects"
+)
+assert package.get("include-v-in-tag") is not False, (
+    "homebrew-formula.yml expects tags shaped like v1.2.3"
+)
+print("release config ok: tags are vX.Y.Z")
+PY
+
+grep -q 'gh workflow run homebrew.yml' .github/workflows/release.yml || {
+  echo "release.yml no longer dispatches homebrew.yml at the tag; the tap would" >&2
+  echo "never be updated, because the tag push starts no workflow." >&2
+  exit 1
+}
+echo "tag dispatch ok"
+
 tmp=$(mktemp)
 trap 'rm -f "$tmp" "$tmp.patch"' EXIT
 
