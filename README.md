@@ -218,10 +218,24 @@ against the path as printed — `crap tests/` finds nothing without
 - Coverage is line-based, so a function with a single untested line inside a
   covered block scores exactly that line as uncovered.
 
+## Releasing
+
+Releases go out through [matt-riley-ci](https://github.com/matt-riley/matt-riley-ci).
+Conventional commits on `main` drive release-please; merging its release PR
+builds the four platform binaries, publishes the GitHub release, and updates
+the Homebrew tap — all in that one run, so no tag-triggered workflow is needed.
+`crap` installs with `brew install matt-riley/tools/crap`.
+
+The tap only works from a public repository with anonymously downloadable
+release assets. The Homebrew step needs a `HOMEBREW_TAP_GITHUB_TOKEN` (or
+`TAP_TOKEN`) secret with contents write on `matt-riley/homebrew-tools`; without
+it the release fails rather than quietly skipping the tap.
+
 ## Development
 
 ```bash
-.pi/verify        # fmt + clippy + tests
+mise run ci       # fmt + clippy + tests + release build
+.pi/verify        # the above, plus workflow checks, a self-scan and packaging
 ```
 
 The fixtures in `tests/fixtures/` annotate each function with the complexity a

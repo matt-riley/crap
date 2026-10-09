@@ -1,0 +1,30 @@
+[tools]
+rust = "1.99"
+actionlint = "1.7.12"
+
+[tasks.install]
+description = "Fetch dependencies"
+run = "cargo fetch --locked"
+
+[tasks.fmt]
+description = "Check formatting"
+run = "cargo fmt --check"
+
+[tasks.lint]
+description = "Lint"
+depends = ["install"]
+run = "cargo clippy --all-targets -- -D warnings"
+
+[tasks.test]
+description = "Test"
+depends = ["install"]
+run = "cargo test --locked"
+
+[tasks.build]
+description = "Build the release binary"
+depends = ["install"]
+run = "cargo build --release --locked"
+
+[tasks.ci]
+description = "Everything CI runs"
+depends = ["fmt", "lint", "test", "build"]

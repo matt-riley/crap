@@ -1,13 +1,19 @@
 #!/usr/bin/env sh
-# Verification for crap: formatting, lints, tests, then real runs of the binary
-# to prove it scores itself inside its token budget and narrows correctly in
-# diff mode.
+# Verification for crap: everything CI runs, plus the checks CI cannot make for
+# itself (its own workflow files, and a real run of the binary).
 set -eu
 cd "$(dirname "$0")/.."
 
+# The same commands mise.toml hands to the reusable CI workflow.
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
-cargo test
+cargo test --locked
+cargo build --release --locked
+
+# GitHub rejects a workflow file it cannot parse, which would take CI down with
+# it — so this cannot be left to CI.
+actionlint .github/workflows/*.yml
+python3 .pi/check-workflows.py
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp" "$tmp.patch"' EXIT
@@ -53,4 +59,19 @@ print(
     f"diff mode ok: {doc['diff']['functions']} changed of "
     f"{doc['summary']['functions']} functions"
 )
+PY
+
+# The release archive must unpack to exactly the binary the Homebrew formula
+# installs, at the root of the tarball.
+stage=$(mktemp -d)
+trap 'rm -rf "$stage" "$tmp" "$tmp.patch"' EXIT
+cp target/release/crap "$stage/crap"
+COPYFILE_DISABLE=1 tar -czf "$stage/crap_darwin_arm64.tar.gz" -C "$stage" crap
+python3 - "$stage/crap_darwin_arm64.tar.gz" <<'PY'
+import sys, tarfile
+
+with tarfile.open(sys.argv[1]) as archive:
+    names = [n.lstrip("./") for n in archive.getnames()]
+assert names == ["crap"], f"archive holds {names}, expected ['crap']"
+print(f"packaging ok: archive holds {names[0]}")
 PY
