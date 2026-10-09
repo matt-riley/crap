@@ -1,7 +1,8 @@
 use clap::{Parser, ValueEnum};
 use crap_cli::coverage::{self, Coverage};
+use crap_cli::diff::{self, Changed};
 use crap_cli::lang::Lang;
-use crap_cli::report::{CovInfo, Finding, Report, Summary};
+use crap_cli::report::{CovInfo, DiffInfo, Dropped, Finding, Report, Summary};
 use crap_cli::score::{self, Options};
 use ignore::WalkBuilder;
 use ignore::overrides::OverrideBuilder;
@@ -17,7 +18,12 @@ comp is cyclomatic complexity (1 + branch sites). cov is the share of
 instrumented lines covered inside the function. With no coverage report every
 function is scored at 0% coverage, so every score is the cc^2 + cc upper bound.
 
-Exit codes: 0 report, 1 threshold tripped with --fail-above, 2 error.";
+Exit codes: 0 report, 1 threshold tripped with --fail-above, 2 error.
+
+Feature work: --diff scores only the functions a branch touched. `--diff`
+covers uncommitted work, `--diff main` adds it to the difference from main,
+and `--diff 'main...HEAD'` is the committed work since branching. --diff-file
+reads a patch instead, so CI can pass one in.";
 
 #[derive(Parser)]
 #[command(
@@ -38,6 +44,20 @@ struct Cli {
     /// Ignore auto-discovered coverage and score everything at 0%
     #[arg(long)]
     no_coverage: bool,
+
+    /// Diff the working tree against REV and score only changed functions
+    #[arg(
+        long,
+        value_name = "REV",
+        num_args = 0..=1,
+        default_missing_value = "HEAD",
+        conflicts_with = "diff_file"
+    )]
+    diff: Option<String>,
+
+    /// Score only functions touched by a unified diff file (use - for stdin)
+    #[arg(long, value_name = "PATH")]
+    diff_file: Option<PathBuf>,
 
     /// CRAP score above which a function is reported
     #[arg(long, default_value_t = 30.0, value_name = "N")]
@@ -125,6 +145,7 @@ fn main() -> ExitCode {
 
 fn run(cli: &Cli) -> Result<ExitCode, String> {
     let coverage = load_coverage(cli)?;
+    let changed = load_diff(cli)?;
     let files = collect(cli)?;
     let scanned = files.len();
 
@@ -136,29 +157,55 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         .collect();
 
     let mut findings = Vec::new();
-    let mut matched_files = 0usize;
+    let mut covered_files = 0usize;
+    let mut diff_files = 0usize;
+    let mut diff_functions = 0usize;
     for file in &parsed {
         let lines = coverage.as_ref().and_then(|c| c.file_lines(&file.path));
         if lines.is_some() {
-            matched_files += 1;
+            covered_files += 1;
+        }
+        // Match the diff once per file rather than once per function.
+        let ranges = changed.as_ref().and_then(|c| c.ranges_for(&file.path));
+        if ranges.is_some() {
+            diff_files += 1;
         }
         for func in &file.funcs {
             let cov = lines.and_then(|l| coverage::pct_in(l, func.line, func.end_line));
-            findings.push(to_finding(file, func, cov, cli.threshold));
+            let finding = to_finding(file, func, cov, cli.threshold);
+            let touched = ranges.is_some_and(|r| {
+                let touched = diff::overlaps(r, func.line, func.end_line);
+                diff_functions += usize::from(touched);
+                touched
+            });
+            findings.push((touched, finding));
         }
     }
 
+    // In diff mode the report describes the changed functions; otherwise all of them.
+    let in_diff_mode = changed.is_some();
+    let total_functions = findings.len();
+    let unchanged = if in_diff_mode {
+        total_functions - diff_functions
+    } else {
+        0
+    };
+    let mut scored: Vec<Finding> = findings
+        .into_iter()
+        .filter(|(touched, _)| !in_diff_mode || *touched)
+        .map(|(_, finding)| finding)
+        .collect();
+
     let unparsed = parsed.iter().filter(|f| f.unparsed).count();
-    let functions = findings.len();
-    let offenders = findings.iter().filter(|f| f.crap > cli.threshold).count();
-    let load: f64 = findings
+    let offenders = scored.iter().filter(|f| f.crap > cli.threshold).count();
+    let load: f64 = scored
         .iter()
         .filter(|f| f.crap > cli.threshold)
         .map(|f| score::crap_load(f.cc, f.cov, cli.threshold))
         .sum();
-    let summary = summarize(&findings, scanned, cli.threshold, unparsed);
+    let summary = summarize(&scored, scanned, total_functions, cli.threshold, unparsed);
 
-    findings.sort_by(|a, b| {
+    scored.sort_by(|a, b| {
         b.crap
             .partial_cmp(&a.crap)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -168,10 +215,10 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
     });
 
     let (candidates, below_threshold) = if cli.all {
-        (findings.as_slice(), 0)
+        (scored.as_slice(), 0)
     } else {
-        let split = findings.partition_point(|f| f.crap > cli.threshold);
-        (&findings[..split], functions - split)
+        let split = scored.partition_point(|f| f.crap > cli.threshold);
+        (&scored[..split], scored.len() - split)
     };
 
     let report = Report {
@@ -179,14 +226,24 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         coverage: coverage.as_ref().map(|c| CovInfo {
             source: c.source.clone(),
             format: c.format,
-            files_matched: matched_files,
+            files_matched: covered_files,
+        }),
+        diff: changed.as_ref().map(|c| DiffInfo {
+            source: diff_source(cli),
+            files: c.files,
+            matched_files: diff_files,
+            functions: diff_functions,
         }),
         summary: Summary {
             crap_load: load.ceil() as u32,
             ..summary
         },
         findings: candidates,
-        below_threshold,
+        dropped: Dropped {
+            below_threshold,
+            not_shown: 0,
+            unchanged,
+        },
     };
 
     if !cli.quiet {
@@ -258,17 +315,26 @@ fn to_finding(file: &Parsed, func: &score::Func, cov: Option<f64>, threshold: f6
     }
 }
 
-fn summarize(findings: &[Finding], files: usize, threshold: f64, unparsed: usize) -> Summary {
-    let offenders = findings.iter().filter(|f| f.crap > threshold).count();
-    let worst = findings.iter().map(|f| f.crap).fold(0.0, f64::max);
-    let mean = if findings.is_empty() {
+/// `scored` is the set the report describes — every function normally, only the
+/// changed ones in diff mode. `functions` stays the size of the whole scan so
+/// the summary never quietly changes meaning between modes.
+fn summarize(
+    scored: &[Finding],
+    files: usize,
+    functions: usize,
+    threshold: f64,
+    unparsed: usize,
+) -> Summary {
+    let offenders = scored.iter().filter(|f| f.crap > threshold).count();
+    let worst = scored.iter().map(|f| f.crap).fold(0.0, f64::max);
+    let mean = if scored.is_empty() {
         0.0
     } else {
-        findings.iter().map(|f| f.crap).sum::<f64>() / findings.len() as f64
+        scored.iter().map(|f| f.crap).sum::<f64>() / scored.len() as f64
     };
     Summary {
         files,
-        functions: findings.len(),
+        functions,
         offenders,
         worst: round1(worst),
         mean: round1(mean),
@@ -280,6 +346,51 @@ fn summarize(findings: &[Finding], files: usize, threshold: f64, unparsed: usize
 
 fn round1(value: f64) -> f64 {
     (value * 10.0).round() / 10.0
+}
+
+/// The patch to score against, from git or from a file. `None` means score
+/// everything.
+fn load_diff(cli: &Cli) -> Result<Option<Changed>, String> {
+    if let Some(path) = &cli.diff_file {
+        let text = if path.as_os_str() == "-" {
+            let mut buffer = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer)
+                .map_err(|e| format!("cannot read diff from stdin: {e}"))?;
+            buffer
+        } else {
+            std::fs::read_to_string(path)
+                .map_err(|e| format!("cannot read diff {}: {e}", path.display()))?
+        };
+        return Ok(Some(Changed::parse(&text)));
+    }
+    match &cli.diff {
+        Some(rev) => Changed::from_git(rev, &git_dir(cli)).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// Run git from the tree being scanned rather than from wherever the process
+/// happens to be, so `crap /some/other/repo --diff main` diffs the right repo.
+fn git_dir(cli: &Cli) -> PathBuf {
+    let first = &cli.paths[0];
+    let dir = if first.is_dir() {
+        first.clone()
+    } else {
+        first.parent().map(Path::to_path_buf).unwrap_or_default()
+    };
+    if dir.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        dir
+    }
+}
+
+fn diff_source(cli: &Cli) -> String {
+    match (&cli.diff, &cli.diff_file) {
+        (Some(rev), _) => rev.clone(),
+        (_, Some(path)) => path.display().to_string(),
+        _ => String::new(),
+    }
 }
 
 fn load_coverage(cli: &Cli) -> Result<Option<Coverage>, String> {

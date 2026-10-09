@@ -6,7 +6,7 @@ use serde::Serialize;
 
 /// Room reserved for the `dropped` object and the closing brace, so the
 /// budget check can never produce truncated JSON.
-const TAIL_RESERVE: usize = 96;
+const TAIL_RESERVE: usize = 160;
 
 #[derive(Debug, Serialize)]
 pub struct Finding {
@@ -49,14 +49,35 @@ fn is_zero(value: &usize) -> bool {
     *value == 0
 }
 
+#[derive(Debug, Serialize)]
+pub struct DiffInfo {
+    /// Revision diffed against, or the path the patch was read from.
+    pub source: String,
+    /// Files the diff touches.
+    pub files: usize,
+    /// Files the diff touches that were also scanned and scored.
+    pub matched_files: usize,
+    /// Functions intersecting the diff.
+    pub functions: usize,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct Dropped {
+    pub below_threshold: usize,
+    pub not_shown: usize,
+    /// Functions the diff did not touch, withheld because --diff was given.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub unchanged: usize,
+}
+
 pub struct Report<'a> {
     pub ok: bool,
     pub coverage: Option<CovInfo>,
+    pub diff: Option<DiffInfo>,
     pub summary: Summary,
     /// Sorted worst-first, already filtered by the threshold.
     pub findings: &'a [Finding],
-    /// Functions that scored at or below the threshold and were withheld.
-    pub below_threshold: usize,
+    pub dropped: Dropped,
 }
 
 impl Report<'_> {
@@ -72,6 +93,10 @@ impl Report<'_> {
         });
         head.push_str(",\"summary\":");
         head.push_str(&serde_json::to_string(&self.summary).expect("summary serialises"));
+        if let Some(diff) = &self.diff {
+            head.push_str(",\"diff\":");
+            head.push_str(&serde_json::to_string(diff).expect("diff serialises"));
+        }
 
         let mut body = String::new();
         let mut shown = 0usize;
@@ -88,10 +113,14 @@ impl Report<'_> {
             shown += 1;
         }
 
+        let dropped = Dropped {
+            below_threshold: self.dropped.below_threshold,
+            not_shown: self.findings.len() - shown,
+            unchanged: self.dropped.unchanged,
+        };
         format!(
-            "{head},\"findings\":[{body}],\"dropped\":{{\"below_threshold\":{},\"not_shown\":{}}}}}",
-            self.below_threshold,
-            self.findings.len() - shown,
+            "{head},\"findings\":[{body}],\"dropped\":{}}}",
+            serde_json::to_string(&dropped).expect("dropped serialises")
         )
     }
 
@@ -122,10 +151,22 @@ impl Report<'_> {
             self.summary.mean,
             self.summary.crap_load,
         ));
-        if self.below_threshold > 0 {
+        if let Some(diff) = &self.diff {
+            out.push_str(&format!(
+                "scoring {} function(s) touched by {} ({} changed file(s) matched)\n",
+                diff.functions, diff.source, diff.matched_files,
+            ));
+        }
+        if self.dropped.unchanged > 0 {
+            out.push_str(&format!(
+                "{} untouched function(s) withheld\n",
+                self.dropped.unchanged
+            ));
+        }
+        if self.dropped.below_threshold > 0 {
             out.push_str(&format!(
                 "{} function(s) below the threshold withheld\n",
-                self.below_threshold
+                self.dropped.below_threshold
             ));
         }
         out
@@ -141,6 +182,7 @@ mod tests {
         Report {
             ok: false,
             coverage: None,
+            diff: None,
             summary: Summary {
                 files: 1,
                 functions: 100,
@@ -152,7 +194,11 @@ mod tests {
                 unparsed: 0,
             },
             findings: leak,
-            below_threshold: 50,
+            dropped: Dropped {
+                below_threshold: 50,
+                not_shown: 0,
+                unchanged: 0,
+            },
         }
     }
 

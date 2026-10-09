@@ -1,0 +1,10 @@
+diff --git a/tests/fixtures/sample.rs b/tests/fixtures/sample.rs
+index 1111111..2222222 100644
+--- a/tests/fixtures/sample.rs
++++ b/tests/fixtures/sample.rs
+@@ -12,4 +12,4 @@
+ fn outer(a: bool) -> i32 {                               // cc=2 (nested closure excluded)
+-    let inner = |b: bool| if b { 1 } else { 2 };          // cc=2
++    let inner = |b: bool| if b { 1 } else { 2 * 2 };      // cc=2
+     if a { inner(a) } else { 0 }
+ }

@@ -337,3 +337,125 @@ fn unparseable_files_are_reported_rather_than_scored_as_empty() {
     let clean: serde_json::Value = serde_json::from_str(&clean).unwrap();
     assert!(clean["summary"].get("unparsed").is_none());
 }
+
+/// A patch touching the body of `outer` (line 13) must report `outer` and its
+/// nested closure but leave the untouched `matcher` and `method` alone.
+#[test]
+fn diff_mode_scores_only_the_functions_a_patch_touched() {
+    let (out, code) = run_cli(&[
+        "tests/fixtures/sample.rs",
+        "--diff-file",
+        "tests/fixtures/changed.diff",
+        "--no-coverage",
+        "--all",
+        "--top",
+        "100",
+    ]);
+    assert_eq!(code, 0);
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+
+    assert_eq!(parsed["diff"]["matched_files"], 1);
+    let names: Vec<&str> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"outer"), "found {names:?}");
+    assert!(
+        names.contains(&"inner"),
+        "the nested closure is in the changed span"
+    );
+    assert!(!names.contains(&"matcher"), "matcher was not touched");
+    assert!(!names.contains(&"trivial"), "trivial was not touched");
+
+    // the whole file was still scanned, and the untouched remainder is accounted for
+    assert_eq!(parsed["summary"]["functions"], 7);
+    assert_eq!(parsed["diff"]["functions"], 2);
+    assert_eq!(parsed["dropped"]["unchanged"], 5);
+    assert_eq!(parsed["coverage"], serde_json::Value::Null);
+}
+
+#[test]
+fn a_patch_that_matches_nothing_reports_zero_rather_than_everything() {
+    let dir = std::env::temp_dir().join("crap-unmatched-diff");
+    std::fs::create_dir_all(&dir).unwrap();
+    let patch = dir.join("other.diff");
+    std::fs::write(&patch, "+++ b/somewhere/else.ts\n@@ -0,0 +1,1 @@\n+x\n").unwrap();
+
+    let (out, code) = run_cli(&[
+        "tests/fixtures",
+        "--diff-file",
+        patch.to_str().unwrap(),
+        "--no-coverage",
+        "--all",
+    ]);
+    assert_eq!(code, 0);
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+    assert_eq!(parsed["diff"]["files"], 1);
+    assert_eq!(
+        parsed["diff"]["matched_files"], 0,
+        "the mismatch must be visible"
+    );
+    assert!(parsed["findings"].as_array().unwrap().is_empty());
+}
+
+/// The git path, end to end: a real repo, a real commit, a real change.
+#[test]
+fn diff_mode_reads_git_and_includes_untracked_files() {
+    if Command::new("git").arg("--version").output().is_err() {
+        eprintln!("skipping: git not available");
+        return;
+    }
+    let dir = std::env::temp_dir().join("crap-git-diff-fixture");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.com")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.com")
+            .output()
+            .expect("git runs");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    git(&["init", "-q"]);
+    std::fs::write(dir.join("clean.rs"), "fn untouched() -> i32 { 1 }\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "init"]);
+    // one modified tracked file and one brand new untracked file
+    std::fs::write(
+        dir.join("clean.rs"),
+        "fn untouched() -> i32 { 1 }\nfn edited(a: bool) -> i32 { if a { 1 } else { 0 } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("brand_new.rs"),
+        "fn fresh(a: bool, b: bool) -> bool { a && b }\n",
+    )
+    .unwrap();
+
+    let (out, code) = run_cli(&[dir.to_str().unwrap(), "--diff", "--all", "--top", "100"]);
+    assert_eq!(code, 0, "{out}");
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+    let names: Vec<&str> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"edited"), "found {names:?}");
+    assert!(
+        names.contains(&"fresh"),
+        "untracked files count as new: {names:?}"
+    );
+    assert!(!names.contains(&"untouched"), "found {names:?}");
+    assert_eq!(parsed["diff"]["source"], "HEAD");
+}
