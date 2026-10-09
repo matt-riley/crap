@@ -25,7 +25,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    uses: matt-riley/matt-riley-ci/.github/workflows/release-please.yml@199a821df4bedf61b1bcb813fd33eb334a041987
+    uses: matt-riley/matt-riley-ci/.github/workflows/release-please.yml@0a310f1286537ed4fd000af4b35cd6459b00448d
     with:
       config-file: release-please-config.json
       manifest-file: .release-please-manifest.json
@@ -145,9 +145,9 @@ jobs:
     permissions:
       contents: read
     # Needs the commit that taught homebrew-formula.yml to mint from a GitHub
-    # App (199a821, merged); that lets the tap run on a short-lived installation token
+    # App (4.1.0); that lets the tap run on a short-lived installation token
     # scoped to one repository instead of a long-lived PAT.
-    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@199a821df4bedf61b1bcb813fd33eb334a041987
+    uses: matt-riley/matt-riley-ci/.github/workflows/homebrew-formula.yml@0a310f1286537ed4fd000af4b35cd6459b00448d
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
       formula-name: crap
