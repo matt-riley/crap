@@ -1,5 +1,8 @@
 [tools]
-rust = "1.99"
+# GH runners default rustup to the minimal profile, which has no rustfmt or
+# clippy, so `mise run fmt`/`lint` fail there while passing locally. Ask for
+# the components explicitly so the toolchain is the same everywhere.
+rust = { version = "1.99", components = ["rustfmt", "clippy"] }
 actionlint = "1.7.12"
 
 [tasks.install]
