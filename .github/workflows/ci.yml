@@ -17,7 +17,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}:${{ github.ref }}:linux
       cancel-in-progress: true
-    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@cb986078a5bd4775e5fb05348f3618e41fedf4de # v4.0.0
+    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@199a821df4bedf61b1bcb813fd33eb334a041987
     with:
       fmt: true
       lint: true
@@ -31,7 +31,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}:${{ github.ref }}:macos
       cancel-in-progress: true
-    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@cb986078a5bd4775e5fb05348f3618e41fedf4de # v4.0.0
+    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@199a821df4bedf61b1bcb813fd33eb334a041987
     with:
       runner: macos-latest
       test: true
