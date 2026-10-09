@@ -209,8 +209,6 @@ against the path as printed — `crap tests/` finds nothing without
 
 ## Limitations
 
-- No diff or changed-lines mode: it scores what you point it at, not what a
-  pull request touched.
 - No baseline or regression comparison — `--fail-above` is the whole CI story.
   `--diff` narrows the gate to a branch's own changes, which covers most of it.
 - JavaScript is parsed with the TypeScript/TSX grammars rather than a dedicated
@@ -233,6 +231,11 @@ itself: `homebrew-formula.yml` only trusts a run whose ref is
 turn means tags must look like `v1.2.3`, which is why
 `release-please-config.json` sets `include-component-in-tag: false`; the Rust
 strategy would otherwise tag `crap-cli-v0.1.1`, which the publisher rejects.
+
+If the tag scheme ever changes again, migrate the existing tags with it.
+release-please matches its own releases by tag, and a release it cannot match
+is one it cannot use as a baseline — with no baseline it proposes a release
+containing the entire history rather than nothing.
 
 `crap` installs with `brew install matt-riley/tools/crap`.
 
