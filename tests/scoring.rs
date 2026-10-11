@@ -505,3 +505,25 @@ fn git_failures_are_quoted_briefly() {
         "the error should say what to do instead"
     );
 }
+
+#[test]
+fn text_format_honours_top() {
+    let (out, code) = run_cli(&[
+        "tests/fixtures",
+        "--include-tests",
+        "--no-coverage",
+        "--all",
+        "--top",
+        "2",
+        "--format",
+        "text",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(
+        out.lines().filter(|l| l.contains("cc ")).count(),
+        2,
+        "{out}"
+    );
+    assert!(out.contains("withheld by --top"), "{out}");
+}
+

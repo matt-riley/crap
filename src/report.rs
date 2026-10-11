@@ -124,9 +124,10 @@ impl Report<'_> {
         )
     }
 
-    pub fn render_text(&self) -> String {
+    pub fn render_text(&self, top: usize) -> String {
         let mut out = String::new();
-        for f in self.findings {
+        let shown = self.findings.iter().take(top).count();
+        for f in self.findings.iter().take(top) {
             let cov = match f.cov {
                 Some(c) => format!("{c:5.1}%"),
                 None => "    ?".to_string(),
@@ -167,6 +168,12 @@ impl Report<'_> {
             out.push_str(&format!(
                 "{} function(s) below the threshold withheld\n",
                 self.dropped.below_threshold
+            ));
+        }
+        if self.findings.len() > shown {
+            out.push_str(&format!(
+                "{} finding(s) above the threshold withheld by --top\n",
+                self.findings.len() - shown
             ));
         }
         out
@@ -237,6 +244,13 @@ mod tests {
         assert_eq!(parsed["findings"].as_array().unwrap().len(), 5);
         assert_eq!(parsed["dropped"]["not_shown"], 45);
         assert_eq!(parsed["dropped"]["below_threshold"], 50);
+    }
+
+    #[test]
+    fn text_respects_top_and_says_what_it_hid() {
+        let out = report(findings(10)).render_text(3);
+        assert_eq!(out.lines().filter(|l| l.contains("cc ")).count(), 3);
+        assert!(out.contains("7 finding(s) above the threshold withheld by --top"));
     }
 
     #[test]

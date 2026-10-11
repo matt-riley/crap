@@ -250,7 +250,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         match cli.format {
             Format::Json => println!("{}", report.render_json(cli.max_tokens, cli.top)),
             Format::Summary => println!("{}", report.render_json(0, 0)),
-            Format::Text => print!("{}", report.render_text()),
+            Format::Text => print!("{}", report.render_text(cli.top)),
         }
     }
 
