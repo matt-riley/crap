@@ -6,7 +6,7 @@
 //! from inside a function does not by itself flag it.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Every line, for files that are new in their entirety.
@@ -27,8 +27,10 @@ impl Changed {
         let output = git(
             // No --relative: git's default is repo-root-relative, which is what
             // the scanned paths are too. --relative rewrites the a/ and b/
-            // prefixes to c/ and w/ and loses us the exact match.
-            &["diff", "--no-color", "--unified=0", rev],
+            // prefixes to c/ and w/ and loses us the exact match. Ending the
+            // options keeps a rev that opens with `-` from being read as a git
+            // option (`--diff=--output=…` writes files otherwise).
+            &["diff", "--no-color", "--unified=0", "--end-of-options", rev],
             dir,
         )?;
         let mut changed = Self::parse(&String::from_utf8_lossy(&output.stdout));
