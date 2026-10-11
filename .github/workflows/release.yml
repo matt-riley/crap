@@ -121,7 +121,8 @@ jobs:
           cat checksums.txt
 
       # Release Please leaves a draft release, so the assets land before the
-      # Homebrew formula starts pointing at them.
+      # release goes public. The tag already exists (force-tag-creation), which
+      # is what lets the next run find this release as its baseline.
       - name: Upload assets
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}

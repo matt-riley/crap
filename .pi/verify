@@ -35,6 +35,13 @@ assert package.get("include-component-in-tag") is False, (
 assert package.get("include-v-in-tag") is not False, (
     "homebrew-formula.yml expects tags shaped like v1.2.3"
 )
+# A draft release has no tag until it is published, and release-please cannot
+# find a release whose tag does not exist -- it would treat the whole history
+# as unreleased and open a fresh release PR on every push.
+if package.get("draft"):
+    assert package.get("force-tag-creation") is True, (
+        "draft releases must force tag creation or release-please loses its baseline"
+    )
 print("release config ok: tags are vX.Y.Z")
 PY
 

@@ -253,8 +253,15 @@ against the path as printed — `crap tests/` finds nothing without
 
 Releases go out through [matt-riley-ci](https://github.com/matt-riley/matt-riley-ci).
 Conventional commits on `main` drive release-please; merging its release PR
-creates the tag and the GitHub release, and the same run builds the four
-platform binaries, uploads them and un-drafts the release.
+creates the release and its tag, and the same run builds the four platform
+binaries, uploads them, and publishes the release.
+
+The release is created as a draft so the assets land before it goes public,
+with `force-tag-creation` so the tag exists immediately. Both halves matter:
+release-please looks up its previous release by tag commit, and a draft whose
+tag has not been created yet is invisible to that lookup — the run then treats
+every commit as unreleased and opens another release PR, forever. `.pi/verify`
+asserts the pairing.
 
 The tap is updated by `homebrew.yml`, which has to run on the release tag
 itself: `homebrew-formula.yml` only trusts a run whose ref is
