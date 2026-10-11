@@ -1,8 +1,9 @@
 [tools]
 # GH runners default rustup to the minimal profile, which has no rustfmt or
 # clippy, so `mise run fmt`/`lint` fail there while passing locally. Ask for
-# the components explicitly so the toolchain is the same everywhere.
-rust = { version = "1.99", components = ["rustfmt", "clippy"] }
+# the components explicitly so the toolchain is the same everywhere. The
+# self-scan needs llvm-tools for `cargo llvm-cov`.
+rust = { version = "1.99", components = ["rustfmt", "clippy", "llvm-tools-preview"] }
 actionlint = "1.7.12"
 
 [tasks.install]
@@ -28,6 +29,16 @@ description = "Build the release binary"
 depends = ["install"]
 run = "cargo build --release --locked"
 
+[tasks.coverage]
+description = "Generate an LCOV report of the test suite"
+depends = ["install"]
+run = "cargo llvm-cov --lcov --output-path lcov.info --quiet"
+
+[tasks.self-scan]
+description = "Score crap against its own source, with real coverage"
+depends = ["coverage", "build"]
+run = "target/release/crap src --coverage lcov.info --fail-above"
+
 [tasks.ci]
 description = "Everything CI runs"
-depends = ["fmt", "lint", "test", "build"]
+depends = ["fmt", "lint", "test", "build", "self-scan"]

@@ -35,3 +35,37 @@ jobs:
     with:
       runner: macos-latest
       test: true
+
+  # The shared workflow has no coverage phase, and the tool's whole point is
+  # coverage-aware scoring, so it gets its own job: instrumented tests, then
+  # crap against this repository, failing on any function over the threshold.
+  self-scan:
+    name: Self-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: ${{ github.workflow }}:${{ github.ref }}:self-scan
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Install mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea
+        with:
+          version: 2026.9.18
+          add_shims_to_path: false
+      - name: Expose installed tool binaries
+        shell: bash
+        run: |
+          mise bin-paths > "$RUNNER_TEMP/mise-bin-paths"
+          while IFS= read -r directory; do
+            if [ -d "$directory" ]; then printf '%s\n' "$directory" >> "$GITHUB_PATH"; fi
+          done < "$RUNNER_TEMP/mise-bin-paths"
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked --version 0.9.1
+      - name: Score crap against itself
+        run: mise run self-scan

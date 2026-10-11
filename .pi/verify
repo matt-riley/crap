@@ -10,6 +10,12 @@ cargo clippy --all-targets -- -D warnings
 cargo test --locked
 cargo build --release --locked
 
+# Coverage, then the tool against itself. This is what keeps new code honest:
+# a complicated function that arrives without tests fails here.
+cargo llvm-cov --lcov --output-path lcov.info --quiet
+target/release/crap src --coverage lcov.info --fail-above
+echo "self-scan ok: no function above the CRAP threshold"
+
 # GitHub rejects a workflow file it cannot parse, which would take CI down with
 # it — so this cannot be left to CI.
 actionlint .github/workflows/*.yml
