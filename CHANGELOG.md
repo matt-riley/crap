@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/matt-riley/crap/compare/v0.1.4...v0.1.5) (2026-10-11)
+
+
+### Bug Fixes
+
+* **release:** create the tag along with the draft release ([92cc54b](https://github.com/matt-riley/crap/commit/92cc54bb82f6288fcdb1b5777211fc9816395b0c))
+
 ## [0.1.4](https://github.com/matt-riley/crap/compare/v0.1.3...v0.1.4) (2026-10-11)
 
 
