@@ -126,12 +126,19 @@ fn typescript_complexity_matches_the_hand_count() {
 fn test_code_is_skipped_by_default_and_included_on_request() {
     let without = cc("sample.rs", Lang::Rust);
     assert!(!without.iter().any(|(n, _)| n == "test_helper"));
+    // `#[cfg(not(test))]` is compiled outside test builds: production code.
+    assert!(without.iter().any(|(n, _)| n == "outside_tests_only"));
+    assert!(!without.iter().any(|(n, _)| n == "inside_tests_only"));
 
     let with: Vec<String> = discover("sample.rs", Lang::Rust, true)
         .into_iter()
         .map(|f| f.name)
         .collect();
     assert!(with.contains(&"test_helper".to_string()), "found {with:?}");
+    assert!(
+        with.contains(&"inside_tests_only".to_string()),
+        "found {with:?}"
+    );
 }
 
 #[test]
@@ -370,9 +377,9 @@ fn diff_mode_scores_only_the_functions_a_patch_touched() {
     assert!(!names.contains(&"trivial"), "trivial was not touched");
 
     // the whole file was still scanned, and the untouched remainder is accounted for
-    assert_eq!(parsed["summary"]["functions"], 7);
+    assert_eq!(parsed["summary"]["functions"], 8);
     assert_eq!(parsed["diff"]["functions"], 2);
-    assert_eq!(parsed["dropped"]["unchanged"], 5);
+    assert_eq!(parsed["dropped"]["unchanged"], 6);
     assert_eq!(parsed["coverage"], serde_json::Value::Null);
 }
 

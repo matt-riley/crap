@@ -264,8 +264,11 @@ fn is_rust_test(node: Node, src: &[u8]) -> bool {
     while let Some(s) = sibling {
         match s.kind() {
             "attribute_item" => {
+                // `#[cfg(not(test))]` is the opposite of a test marker — it is
+                // production-only code — so a bare `contains("test")` would
+                // silently hide it.
                 let text = node_text(s, src);
-                if text.contains("test") {
+                if text.contains("test") && !text.contains("not(") {
                     return true;
                 }
             }

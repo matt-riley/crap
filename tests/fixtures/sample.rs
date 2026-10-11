@@ -30,6 +30,12 @@ impl Widget {
     }
 }
 
+#[cfg(not(test))]
+fn outside_tests_only() -> bool { true }                  // cc=1 (production)
+
+#[cfg(test)]
+fn inside_tests_only() -> bool { true }                   // excluded by default
+
 #[cfg(test)]
 mod tests {                                             // excluded by default
     use super::*;
