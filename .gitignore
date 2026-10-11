@@ -1,3 +1,4 @@
 /target
 /lcov.info
 .pi/cache/
+.pi/garden.md
