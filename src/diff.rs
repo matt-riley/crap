@@ -122,7 +122,7 @@ impl Changed {
         }
         self.ranges
             .iter()
-            .filter(|(key, _)| path.ends_with(key.as_str()) || key.ends_with(&path))
+            .filter(|(key, _)| at_boundary(&path, key) || at_boundary(key, &path))
             .max_by_key(|(key, _)| key.len())
             .map(|(_, ranges)| ranges)
     }
@@ -187,6 +187,15 @@ fn normalize(path: &str) -> String {
     let path = path.replace('\\', "/");
     let path = path.strip_prefix("./").unwrap_or(&path);
     path.to_string()
+}
+
+/// Whether `needle` is `haystack`, or a suffix of it at a path boundary:
+/// `src/a.rs` matches `app/src/a.rs`, while `a.rs` must not match `data.rs`.
+fn at_boundary(haystack: &str, needle: &str) -> bool {
+    haystack == needle
+        || haystack
+            .strip_suffix(needle)
+            .is_some_and(|prefix| prefix.ends_with('/'))
 }
 
 /// `+++ b/src/foo.ts` -> `src/foo.ts`; `/dev/null` for a deletion.
@@ -309,6 +318,17 @@ new file mode 100644
     fn relative_style_prefixes_are_stripped() {
         let changed = Changed::parse("--- c/src/x.ts\n+++ w/src/x.ts\n@@ -1,0 +2 @@\n+a\n");
         assert_eq!(changed.ranges_for("src/x.ts").unwrap(), &vec![(2, 2)]);
+    }
+
+    /// `a.rs` is a substring of `data.rs`; only a path boundary makes it the
+    /// same file.
+    #[test]
+    fn suffix_matches_need_a_path_boundary() {
+        let changed = Changed::parse("+++ b/data.rs\n@@ -2,0 +3 @@\n+x\n");
+        assert!(changed.ranges_for("data.rs").is_some());
+        assert!(changed.ranges_for("a.rs").is_none());
+        // the legitimate cross-root case still works
+        assert!(changed.ranges_for("app/data.rs").is_some());
     }
 
     #[test]
