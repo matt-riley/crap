@@ -30,3 +30,14 @@ function guard(x: unknown): number {                               // cc=2
 }
 
 const assigned = { handler: (x: number) => (x > 0 ? x : -x) };      // cc=2
+
+function switcher(x: number): number {                             // cc=4
+  switch (x) {
+    case 1:
+      return 1
+    case 2:
+      return 2
+    default:
+      return 3
+  }
+}

@@ -63,8 +63,8 @@ fn go_complexity_matches_the_hand_count() {
         ("BinaryOps", 3),
         ("Outer", 2),
         ("f", 2),
-        ("Switcher", 3),
-        ("Selector", 2),
+        ("Switcher", 4),
+        ("Selector", 3),
         ("Method", 3),
     ] {
         let found = got.iter().find(|(n, _)| n == name).unwrap_or_else(|| {
@@ -105,6 +105,7 @@ fn typescript_complexity_matches_the_hand_count() {
         ("trivial", 1),
         ("binaryOps", 3),
         ("nullish", 2),
+        ("switcher", 4),
         ("outer", 2),
         ("inner", 2),
         ("run", 3),

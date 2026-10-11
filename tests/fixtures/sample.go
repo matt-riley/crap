@@ -10,7 +10,7 @@ func Outer(a bool) int {                                          // cc=2 (closu
 	return 0
 }
 
-func Switcher(x int) int {                                        // cc=3
+func Switcher(x int) int {                                        // cc=4
 	switch x {
 	case 1:
 		return 1
@@ -21,7 +21,7 @@ func Switcher(x int) int {                                        // cc=3
 	}
 }
 
-func Selector(ch chan int) int {                                  // cc=2
+func Selector(ch chan int) int {                                  // cc=3
 	select {
 	case <-ch:
 		return 1

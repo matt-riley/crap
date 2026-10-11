@@ -43,6 +43,7 @@ const TS_BRANCHES: &[&str] = &[
     "while_statement",
     "do_statement",
     "switch_case",
+    "switch_default",
     "catch_clause",
     "ternary_expression",
 ];
@@ -76,6 +77,7 @@ const GO_BRANCHES: &[&str] = &[
     "expression_case",
     "type_case",
     "communication_case",
+    "default_case",
 ];
 const GO_OPS: &[&str] = &["&&", "||"];
 const GO_SPEC: Spec = Spec {
