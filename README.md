@@ -36,11 +36,13 @@ scores 42. Cover it completely and it scores 6.
 | 50% | 8.1 | 22.5 | 70 |
 | 100% | 5 | 10 | 20 |
 
-crap4j's original guidance: **30 is the crappy line.** Below it you need
-nothing; at complexity 26–30 you need 100% coverage to stay under it; above 31
-no amount of testing saves you and the answer is to refactor. `crap` reports
-`warn` above the threshold and `crit` above twice it (30/60 by default, and the
-bands scale if you change `--threshold`).
+crap4j's original guidance: **30 is the crappy line.** At complexity 30 a
+function needs 100% coverage to sit on the line; above 30 no amount of testing
+saves it and the answer is to refactor. Lower complexities need much less —
+complexity 26 needs about 82% coverage, and a complexity-5 function scores
+exactly 30 even untested. `crap` reports `warn` above the threshold and `crit`
+above twice it (30/60 by default, and the bands scale if you change
+`--threshold`).
 
 The summary also reports **crap load**: the minimum work to drag every offender
 under the threshold, counting one test per uncovered point plus one
@@ -61,13 +63,21 @@ crap src/ --diff                           # only what I have not committed yet
 crap src/ --diff 'main...HEAD'             # only what this branch added
 crap src/ --format text                    # for humans
 crap src/ --fail-above                     # CI gate, exit 1 if anything is over
+crap src/ --baseline main.json             # gate on regressions, not absolutes
+crap src/ --format github                  # PR annotations for CI
 crap src/ --max-tokens 4000 --top 50       # when you want more
 ```
 
 Coverage is auto-discovered when the flag is omitted, from `lcov.info`,
 `coverage/lcov.info`, `target/llvm-cov/lcov.info`, `coverage-final.json`,
 `coverage/coverage-final.json`, `cobertura.xml`, `coverage.xml` and
-`coverage.out`.
+`coverage.out` — looking first in the tree you pointed `crap` at, then at its
+repository root, then at the working directory.
+
+`--coverage` is repeatable and reports are merged: entries naming the same
+file are combined, hits summed, so a unit and an integration report can be
+passed together. Only genuinely different files that share a suffix (two
+`mod.rs`) stay unmatched rather than guessed at.
 
 ### Generating a coverage report
 
@@ -84,9 +94,9 @@ Complexity is `1 + ` one point per site:
 
 | Language | Counted |
 |---|---|
-| TS / JS | `if`, `for`, `for…in/of`, `while`, `do`, `case`, `catch`, `? :`, `&&`, `\|\|`, `??` |
+| TS / JS | `if`, `for`, `for…in/of`, `while`, `do`, `case`, `default`, `catch`, `? :`, `&&`, `\|\|`, `??` |
 | Rust | `if`, `while`, `for`, `loop`, each `match` arm, `&&`, `\|\|`, `?` |
-| Go | `if`, `for`, each `case` and `select` clause, `&&`, `\|\|` |
+| Go | `if`, `for`, each `case` and `select` clause, `default`, `&&`, `\|\|` |
 | Lua | `if`, `elseif`, `while`, `repeat`, `for`, `and`, `or` |
 
 Two rules worth knowing:
@@ -153,6 +163,23 @@ block says what was diffed against and how much of it matched:
 never mistaken for a clean one. If `matched_files` is 0, the paths in the diff
 did not line up with anything scanned and the empty result means nothing.
 
+## Baselines
+
+`--diff` answers "what did I touch". `--baseline` answers "did I make it
+worse", which is the better question once the starting point is not clean:
+
+```bash
+crap src/ --coverage lcov.info --all > baseline.json     # once, on main
+crap src/ --coverage lcov.info --baseline baseline.json --fail-on-regression
+```
+
+Functions are matched by file, scope and name rather than line, so unrelated
+edits cannot fake a regression. An offender is marked `regressed` when it
+scored worse than in the baseline or was not there at all; findings carry a
+`before` score and `summary.regressed` counts them. Only offenders can
+regress, so a baseline captured without `--all` still works — absent then just
+means newly over the line.
+
 ## Output
 
 JSON is the default and it is budgeted. The preamble (summary, coverage status)
@@ -179,8 +206,13 @@ is reached; then a `dropped` block says what was withheld and why:
 tree-sitter hit syntax errors, so a file that failed to parse can never be
 mistaken for a file with nothing wrong in it. Tokens are estimated as `chars / 4`. The budget is
 a ceiling, not a hint: at `--max-tokens 4000` a repo with 5,500 functions still
-produces a document under 4,000 tokens. `--max-tokens 0` gives the preamble
-alone, which is also what `--format summary` does.
+produces a document under 4,000 tokens. `--max-tokens 0` disables the budget,
+leaving `--top` as the only cap; `--format summary` prints the preamble with no
+findings at all.
+
+`--format text` is a one-line-per-finding table and `--format github` emits
+workflow annotations instead, so CI shows findings on the pull request. Neither
+is token-budgeted; `--top` applies to every format.
 
 Paths stay relative, so the output is portable and short. `--snippet` adds the
 declaration's first line when you need to see the shape of the thing without
@@ -188,9 +220,10 @@ opening the file.
 
 ## Exit codes
 
-`0` report produced, `1` threshold tripped and `--fail-above` was set, `2`
-error (unreadable coverage file, a bad exclude pattern, a path that does not
-exist, a git command that failed). `"ok"` in the JSON carries the
+`0` report produced, `1` `--fail-above` tripped or `--fail-on-regression`
+found a new or worse offender, `2` error (unreadable coverage file, an
+unreadable baseline, a bad exclude pattern, a path that does not exist, a git
+command that failed). `"ok"` in the JSON carries the
 same verdict, so a model never has to infer it from a status code.
 
 ## Skips
@@ -209,8 +242,8 @@ against the path as printed — `crap tests/` finds nothing without
 
 ## Limitations
 
-- No baseline or regression comparison — `--fail-above` is the whole CI story.
-  `--diff` narrows the gate to a branch's own changes, which covers most of it.
+- A baseline is a snapshot, not a ratchet: code that grows slowly while
+  staying under the threshold trips neither gate.
 - JavaScript is parsed with the TypeScript/TSX grammars rather than a dedicated
   JS grammar. Fine in practice; add `tree-sitter-javascript` if it ever isn't.
 - Coverage is line-based, so a function with a single untested line inside a
@@ -249,9 +282,15 @@ with neither configured the release fails rather than quietly skipping the tap.
 ## Development
 
 ```bash
-mise run ci       # fmt + clippy + tests + release build
-.pi/verify        # the above, plus workflow checks, a self-scan and packaging
+mise run coverage    # cargo llvm-cov -> lcov.info
+mise run self-scan   # score crap against its own source, fail above 30
+mise run ci          # fmt + clippy + tests + build + self-scan
+.pi/verify           # the above, plus workflow checks and packaging
 ```
+
+The self-scan is the tool's own gate: CI runs the test suite under
+`cargo llvm-cov`, then `crap src --coverage lcov.info --fail-above`. A
+complicated function that arrives without tests fails the build.
 
 The fixtures in `tests/fixtures/` annotate each function with the complexity a
 human counts by hand; a wrong node kind in a language spec fails there.
