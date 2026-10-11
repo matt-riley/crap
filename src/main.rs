@@ -433,6 +433,37 @@ fn git_dir(cli: &Cli) -> PathBuf {
     }
 }
 
+/// Where to look for an auto-discovered coverage report, most specific first:
+/// the tree that was pointed at, its repository root, then the working
+/// directory. Anchoring on the scanned tree keeps `crap /other/repo` from
+/// reading whatever report happens to sit in the caller's cwd.
+fn discovery_roots(cli: &Cli) -> Vec<PathBuf> {
+    let first = &cli.paths[0];
+    let base = if first.is_dir() {
+        first.clone()
+    } else {
+        first.parent().map(Path::to_path_buf).unwrap_or_default()
+    };
+    let base = if base.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        base
+    };
+
+    let mut roots = vec![base.clone()];
+    if let Some(root) = diff::toplevel(&base) {
+        roots.push(root);
+    }
+    roots.push(PathBuf::from("."));
+    let mut unique = Vec::new();
+    for root in roots {
+        if !unique.contains(&root) {
+            unique.push(root);
+        }
+    }
+    unique
+}
+
 fn diff_source(cli: &Cli) -> String {
     match (&cli.diff, &cli.diff_file) {
         (Some(rev), _) => rev.clone(),
@@ -447,7 +478,9 @@ fn load_coverage(cli: &Cli) -> Result<Option<Coverage>, String> {
         return Ok(None);
     }
     let paths: Vec<PathBuf> = if cli.coverage.is_empty() {
-        coverage::auto_discover().into_iter().collect()
+        coverage::auto_discover(&discovery_roots(cli))
+            .into_iter()
+            .collect()
     } else {
         cli.coverage.clone()
     };

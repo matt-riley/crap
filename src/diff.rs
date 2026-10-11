@@ -158,6 +158,22 @@ fn git(args: &[&str], dir: &Path) -> Result<std::process::Output, String> {
     Ok(output)
 }
 
+/// Repo root of `dir`, when git can name one. Used to anchor coverage
+/// auto-discovery to the tree being scanned.
+pub fn toplevel(dir: &Path) -> Option<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(dir)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let path = PathBuf::from(text.trim());
+    (!path.as_os_str().is_empty()).then_some(path)
+}
+
 fn truncate(text: &str, max: usize) -> String {
     if text.len() <= max {
         return text.to_string();

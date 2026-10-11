@@ -18,11 +18,15 @@ const AUTO_DISCOVERY: &[&str] = &[
     "coverage.out",
 ];
 
-pub fn auto_discover() -> Option<PathBuf> {
-    AUTO_DISCOVERY
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_file())
+/// Look for a report under each root in turn, most specific first, so a scan
+/// of another tree finds that tree's report rather than the caller's.
+pub fn auto_discover(roots: &[PathBuf]) -> Option<PathBuf> {
+    roots.iter().find_map(|root| {
+        AUTO_DISCOVERY
+            .iter()
+            .map(|candidate| root.join(candidate))
+            .find(|candidate| candidate.is_file())
+    })
 }
 
 type Lines = Vec<(u32, u64)>;

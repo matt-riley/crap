@@ -661,3 +661,17 @@ fn an_unreadable_file_is_counted_rather_than_silently_empty() {
     assert_eq!(parsed["summary"]["functions"], 0);
 }
 
+/// A scan of another tree must find that tree's report, not the caller's.
+#[test]
+fn coverage_is_auto_discovered_in_the_scanned_tree() {
+    let dir = std::env::temp_dir().join("crap-autodiscover-fixture");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::copy("tests/fixtures/sample.rs", dir.join("src/sample.rs")).unwrap();
+    std::fs::copy("tests/fixtures/lcov.info", dir.join("lcov.info")).unwrap();
+
+    let (out, code) = run_cli(&[dir.to_str().unwrap(), "--top", "3"]);
+    assert_eq!(code, 0, "{out}");
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+    assert_eq!(parsed["coverage"]["files_matched"], 1, "{out}");
+}
