@@ -601,3 +601,32 @@ fn a_baseline_marks_new_and_worse_offenders_and_can_fail_the_run() {
     assert_eq!(code, 2);
 }
 
+#[test]
+fn github_format_emits_workflow_annotations() {
+    let dir = std::env::temp_dir().join("crap-github-fixture");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("code.rs"),
+        "fn warn(x: u32) -> u32 {\n    match x {\n        1 => 1,\n        2 => 2,\n        3 => 3,\n        4 => 4,\n        _ => 5,\n    }\n}\n\nfn crit(x: u32) -> u32 {\n    match x {\n        1 => 1,\n        2 => 2,\n        3 => 3,\n        4 => 4,\n        5 => 5,\n        6 => 6,\n        7 => 7,\n        8 => 8,\n        _ => 9,\n    }\n}\n",
+    )
+    .unwrap();
+
+    let (out, code) = run_cli(&[
+        dir.to_str().unwrap(),
+        "--no-coverage",
+        "--format",
+        "github",
+        "--top",
+        "10",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("::warning file="), "{out}");
+    assert!(out.contains("::error file="), "{out}");
+    assert!(out.contains("line="), "{out}");
+    assert!(
+        out.lines().all(|line| line.starts_with("::")),
+        "non-annotation line in:\n{out}"
+    );
+}
+

@@ -196,6 +196,54 @@ impl Report<'_> {
         }
         out
     }
+
+    /// GitHub Actions workflow annotations, so CI turns findings into PR
+    /// annotations rather than log lines.
+    pub fn render_github(&self, top: usize) -> String {
+        let mut out = String::new();
+        let shown = self.findings.iter().take(top).count();
+        for f in self.findings.iter().take(top) {
+            let level = match f.sev {
+                "crit" => "error",
+                "warn" => "warning",
+                _ => "notice",
+            };
+            let title = match &f.scope {
+                Some(scope) => format!("{scope}.{}", f.name),
+                None => f.name.clone(),
+            };
+            let cov = match f.cov {
+                Some(cov) => format!("{cov:.1}%"),
+                None => "?".to_string(),
+            };
+            let change = if f.regressed { " (regressed)" } else { "" };
+            out.push_str(&format!(
+                "::{level} file={},line={},title={}::CRAP {:.1} (cc {}, {cov} covered){change}\n",
+                escape_property(&f.file),
+                f.line,
+                escape_property(&title),
+                f.crap,
+                f.cc,
+            ));
+        }
+        if self.findings.len() > shown {
+            out.push_str(&format!(
+                "{} finding(s) above the threshold withheld by --top\n",
+                self.findings.len() - shown
+            ));
+        }
+        out
+    }
+}
+
+/// Annotation properties cannot carry `%`, `:`, `,` or newlines.
+fn escape_property(value: &str) -> String {
+    value
+        .replace('%', "%25")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A")
+        .replace(':', "%3A")
+        .replace(',', "%2C")
 }
 
 #[cfg(test)]
@@ -285,6 +333,18 @@ mod tests {
         let mut fresh = findings(1);
         fresh[0].regressed = true;
         assert!(report(fresh).render_text(10).contains("new offender"));
+    }
+
+    #[test]
+    fn github_annotations_map_severity_and_escape_properties() {
+        let mut items = findings(2);
+        items[0].sev = "crit";
+        items[0].name = "a,b:100%".to_string();
+        items[1].sev = "ok";
+        let out = report(items).render_github(10);
+        assert!(out.contains("::error file="), "{out}");
+        assert!(out.contains("::notice file="), "{out}");
+        assert!(out.contains("a%2Cb%3A100%25"), "{out}");
     }
 
     #[test]

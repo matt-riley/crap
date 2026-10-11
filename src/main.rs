@@ -115,6 +115,7 @@ enum Format {
     Json,
     Text,
     Summary,
+    Github,
 }
 
 /// Never scanned: build output and dependencies.
@@ -262,6 +263,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
     if !cli.quiet {
         match cli.format {
             Format::Json => println!("{}", report.render_json(cli.max_tokens, cli.top)),
+            Format::Github => print!("{}", report.render_github(cli.top)),
             Format::Summary => println!("{}", report.render_json(0, 0)),
             Format::Text => print!("{}", report.render_text(cli.top)),
         }
