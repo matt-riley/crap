@@ -61,6 +61,20 @@ impl Coverage {
             files.append(&mut parsed);
         }
 
+        // A file named by two reports describes one file; sum its hits rather
+        // than let the ambiguity rule below throw the coverage away.
+        let mut merged: BTreeMap<String, BTreeMap<u32, u64>> = BTreeMap::new();
+        for (name, lines) in files {
+            let entry = merged.entry(normalize(&name)).or_default();
+            for (line, hits) in lines {
+                *entry.entry(line).or_insert(0) += hits;
+            }
+        }
+        let files: Files = merged
+            .into_iter()
+            .map(|(name, lines)| (name, lines.into_iter().collect()))
+            .collect();
+
         let mut by_key: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, (name, _)) in files.iter().enumerate() {
             for key in key_variants(name) {
@@ -114,9 +128,17 @@ pub fn pct_in(lines: &Lines, start: u32, end: u32) -> Option<f64> {
     (total > 0).then(|| f64::from(covered) / f64::from(total) * 100.0)
 }
 
+/// `./a\b.rs` -> `a/b.rs`, so the same file named differently by two
+/// reports still merges.
+fn normalize(path: &str) -> String {
+    let path = path.replace('\\', "/");
+    let path = path.strip_prefix("./").unwrap_or(&path);
+    path.to_string()
+}
+
 /// `a/b/c.rs` -> `["a/b/c.rs", "b/c.rs", "c.rs"]`
 fn key_variants(path: &str) -> Vec<String> {
-    let normalised = path.replace('\\', "/");
+    let normalised = normalize(path);
     let parts: Vec<&str> = normalised
         .split('/')
         .filter(|s| !s.is_empty() && *s != ".")
@@ -343,6 +365,35 @@ mod tests {
         let cov = fixture("lcov-ambiguous.info");
         assert!(cov.file_lines("src/sample.rs").is_none());
         assert!(cov.file_lines("a/sample.rs").is_some());
+    }
+
+    /// The flag is repeatable so a unit and an integration report can be
+    /// merged, and both name the same sources. That must merge, not vanish.
+    #[test]
+    fn the_same_file_in_two_reports_merges() {
+        let paths = [
+            PathBuf::from("tests/fixtures/lcov.info"),
+            PathBuf::from("tests/fixtures/lcov.info"),
+        ];
+        let got = Coverage::load_all(&paths)
+            .unwrap()
+            .pct("src/sample.rs", 1, 10)
+            .unwrap();
+        assert!((got - EXPECTED).abs() < 1e-9);
+    }
+
+    /// Different formats naming the same file merge too, so the obvious
+    /// invocation is not a silent black hole.
+    #[test]
+    fn reports_in_different_formats_merge() {
+        let paths = [
+            PathBuf::from("tests/fixtures/lcov.info"),
+            PathBuf::from("tests/fixtures/cobertura.xml"),
+        ];
+        let cov = Coverage::load_all(&paths).unwrap();
+        assert_eq!(cov.format, "lcov");
+        let got = cov.pct("src/sample.rs", 1, 10).unwrap();
+        assert!((got - EXPECTED).abs() < 1e-9);
     }
 
     #[test]
