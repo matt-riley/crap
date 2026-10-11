@@ -193,6 +193,15 @@ fn run_cli(args: &[&str]) -> (String, i32) {
     )
 }
 
+/// A scratch directory for a test, cleared first so a stale run cannot colour
+/// a fresh one.
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 #[test]
 fn json_stays_inside_the_token_budget() {
     let (out, code) = run_cli(&[
@@ -331,8 +340,7 @@ fn a_missing_path_is_an_error_not_a_clean_report() {
 
 #[test]
 fn unparseable_files_are_reported_rather_than_scored_as_empty() {
-    let dir = std::env::temp_dir().join("crap-unparsed-fixture");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-unparsed-fixture");
     std::fs::write(dir.join("broken.rs"), "fn (((( \nif if if\n").unwrap();
 
     let (out, code) = run_cli(&[dir.to_str().unwrap(), "--no-coverage"]);
@@ -386,8 +394,7 @@ fn diff_mode_scores_only_the_functions_a_patch_touched() {
 
 #[test]
 fn a_patch_that_matches_nothing_reports_zero_rather_than_everything() {
-    let dir = std::env::temp_dir().join("crap-unmatched-diff");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-unmatched-diff");
     let patch = dir.join("other.diff");
     std::fs::write(&patch, "+++ b/somewhere/else.ts\n@@ -0,0 +1,1 @@\n+x\n").unwrap();
 
@@ -415,9 +422,7 @@ fn diff_mode_reads_git_and_includes_untracked_files() {
         eprintln!("skipping: git not available");
         return;
     }
-    let dir = std::env::temp_dir().join("crap-git-diff-fixture");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-git-diff-fixture");
     let git = |args: &[&str]| {
         let out = Command::new("git")
             .args(args)
@@ -472,8 +477,7 @@ fn diff_mode_reads_git_and_includes_untracked_files() {
 /// dump that into a caller's context window.
 #[test]
 fn git_failures_are_quoted_briefly() {
-    let dir = std::env::temp_dir().join("crap-not-a-repo");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-not-a-repo");
     // Skip if this machine really does have a repo at /tmp.
     if Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
@@ -531,9 +535,7 @@ fn text_format_honours_top() {
 /// worse?", which is the gate people want on a branch.
 #[test]
 fn a_baseline_marks_new_and_worse_offenders_and_can_fail_the_run() {
-    let dir = std::env::temp_dir().join("crap-baseline-fixture");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-baseline-fixture");
     std::fs::write(
         dir.join("code.rs"),
         "fn big(x: u32) -> u32 {\n    match x {\n        1 => 1,\n        2 => 2,\n        3 => 3,\n        4 => 4,\n        _ => 5,\n    }\n}\n",
@@ -603,9 +605,7 @@ fn a_baseline_marks_new_and_worse_offenders_and_can_fail_the_run() {
 
 #[test]
 fn github_format_emits_workflow_annotations() {
-    let dir = std::env::temp_dir().join("crap-github-fixture");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-github-fixture");
     std::fs::write(
         dir.join("code.rs"),
         "fn warn(x: u32) -> u32 {\n    match x {\n        1 => 1,\n        2 => 2,\n        3 => 3,\n        4 => 4,\n        _ => 5,\n    }\n}\n\nfn crit(x: u32) -> u32 {\n    match x {\n        1 => 1,\n        2 => 2,\n        3 => 3,\n        4 => 4,\n        5 => 5,\n        6 => 6,\n        7 => 7,\n        8 => 8,\n        _ => 9,\n    }\n}\n",
@@ -637,9 +637,7 @@ fn github_format_emits_workflow_annotations() {
 fn an_unreadable_file_is_counted_rather_than_silently_empty() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::env::temp_dir().join("crap-unreadable-fixture");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch("crap-unreadable-fixture");
     let path = dir.join("locked.rs");
     std::fs::write(&path, "fn hidden() {}\n").unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
@@ -664,8 +662,7 @@ fn an_unreadable_file_is_counted_rather_than_silently_empty() {
 /// A scan of another tree must find that tree's report, not the caller's.
 #[test]
 fn coverage_is_auto_discovered_in_the_scanned_tree() {
-    let dir = std::env::temp_dir().join("crap-autodiscover-fixture");
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = scratch("crap-autodiscover-fixture");
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::copy("tests/fixtures/sample.rs", dir.join("src/sample.rs")).unwrap();
     std::fs::copy("tests/fixtures/lcov.info", dir.join("lcov.info")).unwrap();
