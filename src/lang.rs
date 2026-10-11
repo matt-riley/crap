@@ -114,16 +114,6 @@ impl Lang {
         }
     }
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Lang::Ts => "typescript",
-            Lang::Tsx => "typescript/jsx",
-            Lang::Rust => "rust",
-            Lang::Go => "go",
-            Lang::Lua => "lua",
-        }
-    }
-
     pub fn grammar(self) -> Language {
         match self {
             Lang::Ts => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
@@ -164,7 +154,7 @@ mod tests {
             let mut parser = Parser::new();
             parser
                 .set_language(&lang.grammar())
-                .unwrap_or_else(|e| panic!("{} failed to load: {e}", lang.name()));
+                .unwrap_or_else(|e| panic!("{lang:?} failed to load: {e}"));
             let tree = parser.parse("", None).expect("parse");
             assert_eq!(tree.root_node().kind(), root_kind(lang));
         }
