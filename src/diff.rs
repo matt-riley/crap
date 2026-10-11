@@ -333,6 +333,19 @@ new file mode 100644
         assert!(changed.ranges_for("app/data.rs").is_some());
     }
 
+    /// A rev that opens like an option must fail rather than let git act on it.
+    #[test]
+    fn a_rev_that_opens_like_an_option_is_not_one() {
+        let injected = std::env::temp_dir().join("crap-injected-rev.txt");
+        let _ = std::fs::remove_file(&injected);
+        let rev = format!("--output={}", injected.display());
+        assert!(
+            Changed::from_git(&rev, Path::new(".")).is_err(),
+            "git accepted {rev:?} as a revision"
+        );
+        assert!(!injected.exists(), "git wrote to the path named by the rev");
+    }
+
     #[test]
     fn hunk_headers_without_counts_parse() {
         assert_eq!(hunk_start("@@ -1 +4 @@"), Some(4));
