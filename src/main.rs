@@ -1,4 +1,5 @@
 use clap::{Parser, ValueEnum};
+use crap_cli::baseline::Baseline;
 use crap_cli::coverage::{self, Coverage};
 use crap_cli::diff::{self, Changed};
 use crap_cli::lang::Lang;
@@ -18,7 +19,8 @@ comp is cyclomatic complexity (1 + branch sites). cov is the share of
 instrumented lines covered inside the function. With no coverage report every
 function is scored at 0% coverage, so every score is the cc^2 + cc upper bound.
 
-Exit codes: 0 report, 1 threshold tripped with --fail-above, 2 error.
+Exit codes: 0 report, 1 --fail-above tripped or --fail-on-regression found
+one, 2 error.
 
 Feature work: --diff scores only the functions a branch touched. `--diff`
 covers uncommitted work, `--diff main` adds it to the difference from main,
@@ -95,6 +97,14 @@ struct Cli {
     #[arg(long)]
     fail_above: bool,
 
+    /// Compare against an earlier JSON report: new or worse offenders are marked
+    #[arg(long, value_name = "FILE")]
+    baseline: Option<PathBuf>,
+
+    /// Exit 1 when an offender is new or worse than in --baseline
+    #[arg(long, requires = "baseline")]
+    fail_on_regression: bool,
+
     /// Print nothing (useful with --fail-above)
     #[arg(short, long)]
     quiet: bool,
@@ -145,6 +155,7 @@ fn main() -> ExitCode {
 
 fn run(cli: &Cli) -> Result<ExitCode, String> {
     let coverage = load_coverage(cli)?;
+    let baseline = cli.baseline.as_deref().map(Baseline::load).transpose()?;
     let changed = load_diff(cli)?;
     let files = collect(cli)?;
     let scanned = files.len();
@@ -172,7 +183,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         }
         for func in &file.funcs {
             let cov = lines.and_then(|l| coverage::pct_in(l, func.line, func.end_line));
-            let finding = to_finding(file, func, cov, cli.threshold);
+            let finding = to_finding(file, func, cov, cli.threshold, baseline.as_ref());
             let touched = ranges.is_some_and(|r| {
                 let touched = diff::overlaps(r, func.line, func.end_line);
                 diff_functions += usize::from(touched);
@@ -198,6 +209,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
 
     let unparsed = parsed.iter().filter(|f| f.unparsed).count();
     let offenders = scored.iter().filter(|f| f.crap > cli.threshold).count();
+    let regressed = scored.iter().filter(|f| f.regressed).count();
     let load: f64 = scored
         .iter()
         .filter(|f| f.crap > cli.threshold)
@@ -236,6 +248,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         }),
         summary: Summary {
             crap_load: load.ceil() as u32,
+            regressed,
             ..summary
         },
         findings: candidates,
@@ -254,7 +267,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         }
     }
 
-    if cli.fail_above && offenders > 0 {
+    if (cli.fail_above && offenders > 0) || (cli.fail_on_regression && regressed > 0) {
         return Ok(ExitCode::from(1));
     }
     Ok(ExitCode::SUCCESS)
@@ -300,8 +313,21 @@ fn parse_file(parser: &mut TreeSitter, file: &File, cli: &Cli) -> Parsed {
     }
 }
 
-fn to_finding(file: &Parsed, func: &score::Func, cov: Option<f64>, threshold: f64) -> Finding {
+fn to_finding(
+    file: &Parsed,
+    func: &score::Func,
+    cov: Option<f64>,
+    threshold: f64,
+    baseline: Option<&Baseline>,
+) -> Finding {
     let crap = score::crap(func.cc, cov);
+    let rounded = round1(crap);
+    let before = baseline.and_then(|b| b.before(&file.path, func.scope.as_deref(), &func.name));
+    // Only offenders can regress, so a baseline captured without `--all`
+    // still works: absent there means newly over the line.
+    let regressed = baseline.is_some()
+        && crap > threshold
+        && before.is_none_or(|before| rounded > round1(before));
     Finding {
         file: file.path.clone(),
         line: func.line,
@@ -310,7 +336,9 @@ fn to_finding(file: &Parsed, func: &score::Func, cov: Option<f64>, threshold: f6
         sig: func.sig.clone(),
         cc: func.cc,
         cov: cov.map(round1),
-        crap: round1(crap),
+        crap: rounded,
+        before: before.map(round1),
+        regressed,
         sev: score::severity(crap, threshold),
     }
 }
@@ -341,6 +369,7 @@ fn summarize(
         crap_load: 0,
         threshold,
         unparsed,
+        regressed: 0,
     }
 }
 

@@ -1,5 +1,6 @@
 //! Token-aware CRAP scoring for TypeScript, Rust, Go and Lua.
 
+pub mod baseline;
 pub mod coverage;
 pub mod diff;
 pub mod lang;

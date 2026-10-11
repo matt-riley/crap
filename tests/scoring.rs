@@ -527,3 +527,77 @@ fn text_format_honours_top() {
     assert!(out.contains("withheld by --top"), "{out}");
 }
 
+/// A baseline turns "is this score high?" into "did this change make it
+/// worse?", which is the gate people want on a branch.
+#[test]
+fn a_baseline_marks_new_and_worse_offenders_and_can_fail_the_run() {
+    let dir = std::env::temp_dir().join("crap-baseline-fixture");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("code.rs"),
+        "fn big(x: u32) -> u32 {\n    match x {\n        1 => 1,\n        2 => 2,\n        3 => 3,\n        4 => 4,\n        _ => 5,\n    }\n}\n",
+    )
+    .unwrap();
+    let file = format!("{}/code.rs", dir.display()).replace('\\', "/");
+    let baseline = dir.join("baseline.json");
+    let write_baseline = |crap: Option<&str>| {
+        let finding = crap.map_or(String::new(), |crap| {
+            format!(
+                "{{\"file\":\"{file}\",\"name\":\"big\",\"cc\":6,\"cov\":null,\"crap\":{crap},\"sev\":\"warn\"}}"
+            )
+        });
+        std::fs::write(&baseline, format!("{{\"v\":1,\"findings\":[{finding}]}}")).unwrap();
+    };
+    let run = || {
+        run_cli(&[
+            dir.to_str().unwrap(),
+            "--no-coverage",
+            "--baseline",
+            baseline.to_str().unwrap(),
+            "--fail-on-regression",
+            "--top",
+            "10",
+        ])
+    };
+
+    // Worse than the baseline: flagged, and the run fails on it.
+    write_baseline(Some("35.0"));
+    let (out, code) = run();
+    assert_eq!(code, 1, "regression did not fail the run: {out}");
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+    assert_eq!(parsed["summary"]["regressed"], 1);
+    let big = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["name"] == "big")
+        .expect("big");
+    assert_eq!(big["before"], 35.0);
+    assert_eq!(big["regressed"], true);
+
+    // The same score as the baseline: nothing changed, nothing to fail on.
+    write_baseline(Some("42.0"));
+    let (out, code) = run();
+    assert_eq!(code, 0, "an unchanged offender failed the run: {out}");
+    let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(parsed["summary"].get("regressed").is_none());
+
+    // Absent from the baseline: a new offender is a regression too.
+    write_baseline(None);
+    let (out, code) = run();
+    assert_eq!(code, 1);
+    let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(parsed["summary"]["regressed"], 1);
+    assert!(parsed["findings"][0]["before"].is_null());
+
+    // A baseline that cannot be read is an error, not a silent pass.
+    let (_, code) = run_cli(&[
+        dir.to_str().unwrap(),
+        "--no-coverage",
+        "--baseline",
+        "no-such-baseline.json",
+    ]);
+    assert_eq!(code, 2);
+}
+

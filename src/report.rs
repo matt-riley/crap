@@ -20,6 +20,12 @@ pub struct Finding {
     pub cc: u32,
     pub cov: Option<f64>,
     pub crap: f64,
+    /// The score this function had in `--baseline`, when it was found there.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<f64>,
+    /// New over the threshold, or worse than its baseline score.
+    #[serde(skip_serializing_if = "is_false")]
+    pub regressed: bool,
     pub sev: &'static str,
 }
 
@@ -39,6 +45,9 @@ pub struct Summary {
     pub mean: f64,
     pub crap_load: u32,
     pub threshold: f64,
+    /// Offenders that are new or worse than in `--baseline`. Omitted when zero.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub regressed: usize,
     /// Files tree-sitter could not fully parse. Omitted when zero, because a
     /// silent zero here is indistinguishable from clean code.
     #[serde(skip_serializing_if = "is_zero")]
@@ -47,6 +56,10 @@ pub struct Summary {
 
 fn is_zero(value: &usize) -> bool {
     *value == 0
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Serialize)]
@@ -137,9 +150,14 @@ impl Report<'_> {
                 .as_deref()
                 .map(|s| format!(" ({s})"))
                 .unwrap_or_default();
+            let change = match (f.regressed, f.before) {
+                (true, Some(before)) => format!("  regressed from {before:.1}"),
+                (true, None) => "  new offender".to_string(),
+                _ => String::new(),
+            };
             out.push_str(&format!(
-                "{:7.1}  cc {:>3}  cov {}  {}:{}  {}{}\n",
-                f.crap, f.cc, cov, f.file, f.line, f.name, scope
+                "{:7.1}  cc {:>3}  cov {}  {}:{}  {}{}{}\n",
+                f.crap, f.cc, cov, f.file, f.line, f.name, scope, change
             ));
         }
         out.push_str(&format!(
@@ -199,6 +217,7 @@ mod tests {
                 crap_load: 12,
                 threshold: 30.0,
                 unparsed: 0,
+                regressed: 0,
             },
             findings: leak,
             dropped: Dropped {
@@ -220,6 +239,8 @@ mod tests {
                 cc: 12,
                 cov: Some(0.0),
                 crap: 156.0,
+                before: None,
+                regressed: false,
                 sev: "crit",
             })
             .collect()
@@ -251,6 +272,19 @@ mod tests {
         let out = report(findings(10)).render_text(3);
         assert_eq!(out.lines().filter(|l| l.contains("cc ")).count(), 3);
         assert!(out.contains("7 finding(s) above the threshold withheld by --top"));
+    }
+
+    #[test]
+    fn text_marks_a_regression_against_its_baseline() {
+        let mut items = findings(1);
+        items[0].before = Some(40.0);
+        items[0].regressed = true;
+        let out = report(items).render_text(10);
+        assert!(out.contains("regressed from 40.0"), "{out}");
+
+        let mut fresh = findings(1);
+        fresh[0].regressed = true;
+        assert!(report(fresh).render_text(10).contains("new offender"));
     }
 
     #[test]
