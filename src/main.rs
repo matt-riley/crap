@@ -209,6 +209,7 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         .collect();
 
     let unparsed = parsed.iter().filter(|f| f.unparsed).count();
+    let unreadable = parsed.iter().filter(|f| f.unreadable).count();
     let offenders = scored.iter().filter(|f| f.crap > cli.threshold).count();
     let regressed = scored.iter().filter(|f| f.regressed).count();
     let load: f64 = scored
@@ -216,7 +217,14 @@ fn run(cli: &Cli) -> Result<ExitCode, String> {
         .filter(|f| f.crap > cli.threshold)
         .map(|f| score::crap_load(f.cc, f.cov, cli.threshold))
         .sum();
-    let summary = summarize(&scored, scanned, total_functions, cli.threshold, unparsed);
+    let summary = summarize(
+        &scored,
+        scanned,
+        total_functions,
+        cli.threshold,
+        unparsed,
+        unreadable,
+    );
 
     scored.sort_by(|a, b| {
         b.crap
@@ -286,6 +294,8 @@ struct Parsed {
     funcs: Vec<score::Func>,
     /// tree-sitter hit ERROR or MISSING nodes; findings here are partial.
     unparsed: bool,
+    /// The file could not be read at all, so it contributed nothing.
+    unreadable: bool,
 }
 
 fn parse_file(parser: &mut TreeSitter, file: &File, cli: &Cli) -> Parsed {
@@ -293,9 +303,13 @@ fn parse_file(parser: &mut TreeSitter, file: &File, cli: &Cli) -> Parsed {
         path: path.to_string(),
         funcs: Vec::new(),
         unparsed: false,
+        unreadable: false,
     };
     let Ok(source) = std::fs::read(&file.path) else {
-        return empty(&file.display);
+        return Parsed {
+            unreadable: true,
+            ..empty(&file.display)
+        };
     };
     if parser.set_language(&file.lang.grammar()).is_err() {
         return empty(&file.display);
@@ -312,6 +326,7 @@ fn parse_file(parser: &mut TreeSitter, file: &File, cli: &Cli) -> Parsed {
         path: file.display.clone(),
         funcs,
         unparsed: tree.root_node().has_error(),
+        unreadable: false,
     }
 }
 
@@ -354,6 +369,7 @@ fn summarize(
     functions: usize,
     threshold: f64,
     unparsed: usize,
+    unreadable: usize,
 ) -> Summary {
     let offenders = scored.iter().filter(|f| f.crap > threshold).count();
     let worst = scored.iter().map(|f| f.crap).fold(0.0, f64::max);
@@ -370,6 +386,7 @@ fn summarize(
         mean: round1(mean),
         crap_load: 0,
         threshold,
+        unreadable,
         unparsed,
         regressed: 0,
     }

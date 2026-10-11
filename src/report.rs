@@ -52,6 +52,9 @@ pub struct Summary {
     /// silent zero here is indistinguishable from clean code.
     #[serde(skip_serializing_if = "is_zero")]
     pub unparsed: usize,
+    /// Files that could not be read at all. Omitted when zero.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub unreadable: usize,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -264,6 +267,7 @@ mod tests {
                 mean: 4.0,
                 crap_load: 12,
                 threshold: 30.0,
+                unreadable: 0,
                 unparsed: 0,
                 regressed: 0,
             },

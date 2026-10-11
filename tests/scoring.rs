@@ -630,3 +630,34 @@ fn github_format_emits_workflow_annotations() {
     );
 }
 
+/// A file that cannot be read must show up in the summary; silence is
+/// indistinguishable from clean code.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_file_is_counted_rather_than_silently_empty() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join("crap-unreadable-fixture");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("locked.rs");
+    std::fs::write(&path, "fn hidden() {}\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let restore = || {
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644));
+    };
+    // Root ignores mode bits; only a normal user makes the check meaningful.
+    if std::fs::read(&path).is_ok() {
+        restore();
+        eprintln!("skipping: running as root, permissions are not enforced");
+        return;
+    }
+
+    let (out, code) = run_cli(&[dir.to_str().unwrap(), "--no-coverage"]);
+    restore();
+    assert_eq!(code, 0, "{out}");
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+    assert_eq!(parsed["summary"]["unreadable"], 1);
+    assert_eq!(parsed["summary"]["functions"], 0);
+}
+
