@@ -69,7 +69,7 @@ impl Coverage {
         // than let the ambiguity rule below throw the coverage away.
         let mut merged: BTreeMap<String, BTreeMap<u32, u64>> = BTreeMap::new();
         for (name, lines) in files {
-            let entry = merged.entry(normalize(&name)).or_default();
+            let entry = merged.entry(crate::normalize_path(&name)).or_default();
             for (line, hits) in lines {
                 *entry.entry(line).or_insert(0) += hits;
             }
@@ -132,17 +132,9 @@ pub fn pct_in(lines: &Lines, start: u32, end: u32) -> Option<f64> {
     (total > 0).then(|| f64::from(covered) / f64::from(total) * 100.0)
 }
 
-/// `./a\b.rs` -> `a/b.rs`, so the same file named differently by two
-/// reports still merges.
-fn normalize(path: &str) -> String {
-    let path = path.replace('\\', "/");
-    let path = path.strip_prefix("./").unwrap_or(&path);
-    path.to_string()
-}
-
 /// `a/b/c.rs` -> `["a/b/c.rs", "b/c.rs", "c.rs"]`
 fn key_variants(path: &str) -> Vec<String> {
-    let normalised = normalize(path);
+    let normalised = crate::normalize_path(path);
     let parts: Vec<&str> = normalised
         .split('/')
         .filter(|s| !s.is_empty() && *s != ".")
@@ -154,8 +146,7 @@ fn key_variants(path: &str) -> Vec<String> {
 }
 
 fn display(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
-    text.strip_prefix("./").unwrap_or(&text).to_string()
+    crate::normalize_path(path.to_string_lossy().as_ref())
 }
 
 fn parse(text: &str) -> Option<(&'static str, Files)> {

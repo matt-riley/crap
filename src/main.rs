@@ -556,6 +556,5 @@ fn collect(cli: &Cli) -> Result<Vec<File>, String> {
 }
 
 fn display_path(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
-    text.strip_prefix("./").unwrap_or(&text).to_string()
+    crap_cli::normalize_path(path.to_string_lossy().as_ref())
 }

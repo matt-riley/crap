@@ -42,7 +42,7 @@ impl Changed {
     fn add_untracked(&mut self, dir: &Path) -> Result<(), String> {
         let output = git(&["ls-files", "--others", "--exclude-standard", "-z"], dir)?;
         for raw in output.stdout.split(|b| *b == 0).filter(|s| !s.is_empty()) {
-            let path = normalize(&String::from_utf8_lossy(raw));
+            let path = crate::normalize_path(&String::from_utf8_lossy(raw));
             if self.ranges.insert(path, vec![WHOLE_FILE]).is_none() {
                 self.files += 1;
             }
@@ -118,7 +118,7 @@ impl Changed {
     /// falling back to a path suffix so diffs produced from another root still
     /// line up.
     pub fn ranges_for(&self, path: &str) -> Option<&Vec<(u32, u32)>> {
-        let path = normalize(path);
+        let path = crate::normalize_path(path);
         if let Some(ranges) = self.ranges.get(&path) {
             return Some(ranges);
         }
@@ -201,12 +201,6 @@ fn flush(
     }
 }
 
-fn normalize(path: &str) -> String {
-    let path = path.replace('\\', "/");
-    let path = path.strip_prefix("./").unwrap_or(&path);
-    path.to_string()
-}
-
 /// Whether `needle` is `haystack`, or a suffix of it at a path boundary:
 /// `src/a.rs` matches `app/src/a.rs`, while `a.rs` must not match `data.rs`.
 fn at_boundary(haystack: &str, needle: &str) -> bool {
@@ -223,7 +217,7 @@ fn new_path(rest: &str) -> Option<String> {
     if path == "/dev/null" {
         return None;
     }
-    Some(normalize(strip_prefix(path)))
+    Some(crate::normalize_path(strip_prefix(path)))
 }
 
 /// Diff prefixes: `a/` and `b/` by default, `c/` and `w/` when the diff was
