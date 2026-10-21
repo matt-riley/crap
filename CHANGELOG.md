@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/matt-riley/crap/compare/v0.1.5...v0.1.6) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate tree-sitter to 0.27 ([#9](https://github.com/matt-riley/crap/issues/9)) ([e6b74fc](https://github.com/matt-riley/crap/commit/e6b74fca2787e483ba0b9cb4a600d51dd1a42770))
+
 ## [0.1.5](https://github.com/matt-riley/crap/compare/v0.1.4...v0.1.5) (2026-10-11)
 
 
