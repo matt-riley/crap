@@ -17,7 +17,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}:${{ github.ref }}:linux
       cancel-in-progress: true
-    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@b65e4f9b6883ebb8735e5f5e61f46d226024b76d
+    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@c956b4c8237a0b1d733735d48a3724edde629717
     with:
       fmt: true
       lint: true
@@ -31,7 +31,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}:${{ github.ref }}:macos
       cancel-in-progress: true
-    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@b65e4f9b6883ebb8735e5f5e61f46d226024b76d
+    uses: matt-riley/matt-riley-ci/.github/workflows/ci.yml@c956b4c8237a0b1d733735d48a3724edde629717
     with:
       runner: macos-latest
       test: true
@@ -56,7 +56,7 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea
         with:
-          version: 2026.10.19
+          version: 2026.10.25
           add_shims_to_path: false
       - name: Expose installed tool binaries
         shell: bash
