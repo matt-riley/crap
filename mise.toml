@@ -3,7 +3,7 @@
 # clippy, so `mise run fmt`/`lint` fail there while passing locally. Ask for
 # the components explicitly so the toolchain is the same everywhere. The
 # self-scan needs llvm-tools for `cargo llvm-cov`.
-rust = { version = "1.99", components = ["rustfmt", "clippy", "llvm-tools-preview"] }
+rust = { version = "1.100", components = ["rustfmt", "clippy", "llvm-tools-preview"] }
 actionlint = "1.7.12"
 
 [tasks.install]
